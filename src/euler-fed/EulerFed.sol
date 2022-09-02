@@ -30,7 +30,6 @@ contract EulerFed {
         dola.approve(eDola_, type(uint).max); 
     }
 
-
     function expansion(uint dolaAmount) public {
         require(msg.sender == chair);
         dola.mint(address(this), dolaAmount);
@@ -79,5 +78,31 @@ contract EulerFed {
             dola.transfer(gov, dola.balanceOf(address(this)));
         }
     }
+
+    /**
+    @notice Method for gov to change gov address
+    */
+    function changeGov(address newGov_) public {
+        require(msg.sender == gov, "ONLY GOV");
+        gov = newGov_;
+    }
+
+    /**
+    @notice Method for gov to change the chair
+    */
+    function changeChair(address newChair_) public {
+        require(msg.sender == gov, "ONLY GOV");
+        locker.delegate(newChair_);
+        chair = newChair_;
+    }
+
+    /**
+    @notice Method for current chair of the Yearn FED to resign
+    */
+    function resign() public {
+        require(msg.sender == chair, "ONLY CHAIR");
+        chair = address(0);
+    }
+
 
 }
