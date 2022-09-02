@@ -53,7 +53,7 @@ contract EulerFed {
 
     function contractAllAvailable() public {
         require(msg.sender == chair);
-        if(eDola.totalSupply() <= eDola.balanceOf(address(this))){
+        if(eDola.reserveBalance() <= eDola.balanceOf(address(this))){
             eDola.withdraw(0, eDola.reserveBalance());
         } else {
             eDola.withdraw(0, eDola.balanceOf(address(this)));
@@ -103,6 +103,4 @@ contract EulerFed {
         require(msg.sender == chair, "ONLY CHAIR");
         chair = address(0);
     }
-
-
 }
