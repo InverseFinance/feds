@@ -62,11 +62,11 @@ contract BalancerMetapoolAdapter {
     function getUserDataCustomExit(uint exactDolaOut, uint maxBPTin) internal view returns(bytes memory) {
         uint[] memory amounts = new uint[](assets.length-1);
         amounts[dolaIndex-1] = exactDolaOut;
-        return abi.encode(2, amounts, maxBPTin);
+        return abi.encode(1, amounts, maxBPTin);
     }
 
     function getUserDataExitExact(uint exactBptIn) internal view returns(bytes memory) {
-        return abi.encode(1, exactBptIn, dolaIndex-1);
+        return abi.encode(0, exactBptIn, dolaIndex-1);
     }
 
     function createJoinPoolRequest(uint dolaAmount) internal returns(IVault.JoinPoolRequest memory){
@@ -113,7 +113,7 @@ contract BalancerMetapoolAdapter {
         uint init = dola.balanceOf(address(this));
         uint bptNeeded = bptNeededForDola(dolaAmount);
         uint minDolaOut = dolaAmount - dolaAmount * maxSlippage / BPS;
-        vault.exitPool(poolId, address(this), payable(address(this)), createExitExactPoolRequest(0, bptNeeded, minDolaOut));
+        vault.exitPool(poolId, address(this), payable(address(this)), createExitExactPoolRequest(1, bptNeeded, minDolaOut));
         uint dolaOut = dola.balanceOf(address(this)) - init;
         return dolaOut;
     }
