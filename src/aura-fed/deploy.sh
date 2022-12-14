@@ -11,7 +11,7 @@ maxLossWithdraw=10;
 maxLossTakeProfit=10;
 poolId=0x5b3240b6be3e7487d61cd1afdfc7fe4fa1d81e6400000000000000000000037b;
 forge create --rpc-url $1 \
-    --constructor-args $dola $aura $vault $baseRewardPool $booster $chair $gov $maxLossExpansion $maxLossWithdraw $maxLossTakeProfit $poolId\
+    --constructor-args $dola $aura $vault $baseRewardPool $booster $chair $guardian $gov $maxLossExpansion $maxLossWithdraw $maxLossTakeProfit $poolId\
     --private-key $3 src/aura-fed/AuraFed.sol:AuraFed \
     --etherscan-api-key $2 \
     --verify
