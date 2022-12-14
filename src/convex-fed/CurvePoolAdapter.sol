@@ -8,19 +8,16 @@ import "src/interfaces/curve/IZapDepositor3pool.sol";
 abstract contract CurvePoolAdapter {
 
     IERC20 public dola;
-    address public crvMetapool;
-    IZapDepositor3pool public zapDepositor;
+    IMetaPool public crvMetapool;
     uint public constant PRECISION = 10_000;
-    uint public immutable CRVPRECISION;
+    uint public immutable CRVPRECISION = 10**18;
 
-    constructor(address dola_, address crvMetapool_, address zapDepositor_, uint CRVPRECISION_){
+    constructor(address dola_, address crvMetapool_){
         dola = IERC20(dola_);
-        crvMetapool = crvMetapool_;
-        zapDepositor = IZapDepositor3pool(zapDepositor_);
-        CRVPRECISION = CRVPRECISION_;
+        crvMetapool = IMetaPool(crvMetapool_);
         //Approve max uint256 spend for crvMetapool, from this address
-        dola.approve(zapDepositor_, type(uint256).max);
-        IERC20(crvMetapool_).approve(zapDepositor_, type(uint256).max);
+        dola.approve(crvMetapool_, type(uint256).max);
+        IERC20(crvMetapool_).approve(crvMetapool_, type(uint256).max);
     }
     /**
     @notice Function for depositing into curve metapool.
@@ -33,9 +30,9 @@ abstract contract CurvePoolAdapter {
     */
     function metapoolDeposit(uint256 amountDola, uint allowedSlippage) internal returns(uint256){
         //TODO: Should this be corrected for 3CRV virtual price?
-        uint[4] memory amounts = [amountDola, 0, 0 , 0];
-        uint minCrvLPOut = amountDola * 10**18 / IMetaPool(crvMetapool).get_virtual_price() * (PRECISION - allowedSlippage) / PRECISION;
-        return zapDepositor.add_liquidity(crvMetapool, amounts, minCrvLPOut);
+        uint[2] memory amounts = [amountDola, 0];
+        uint minCrvLPOut = amountDola * CRVPRECISION / crvMetapool.get_virtual_price() * (PRECISION - allowedSlippage) / PRECISION;
+        return crvMetapool.add_liquidity(amounts, minCrvLPOut);
     }
 
     /**
@@ -48,13 +45,13 @@ abstract contract CurvePoolAdapter {
     @return Amount of Dola tokens received
     */
     function metapoolWithdraw(uint amountDola, uint allowedSlippage) internal returns(uint256){
-        uint[4] memory amounts = [amountDola, 0, 0 , 0];
-        uint amountCrvLp = zapDepositor.calc_token_amount(crvMetapool, amounts, false);
-        uint expectedCrvLp = amountDola * 10**18 / IMetaPool(crvMetapool).get_virtual_price();
+        uint[2] memory amounts = [amountDola, 0];
+        uint amountCrvLp = crvMetapool.calc_token_amount( amounts, false);
+        uint expectedCrvLp = amountDola * CRVPRECISION / crvMetapool.get_virtual_price();
         //The expectedCrvLp must be higher or equal than the crvLp amount we supply - the allowed slippage
         require(expectedCrvLp >= applySlippage(amountCrvLp, allowedSlippage), "LOSS EXCEED WITHDRAW MAX LOSS");
         uint dolaMinOut = applySlippage(amountDola, allowedSlippage);
-        return zapDepositor.remove_liquidity_one_coin(crvMetapool, amountCrvLp, 0, dolaMinOut);
+        return crvMetapool.remove_liquidity_one_coin(amountCrvLp, 0, dolaMinOut);
     }
 
     function applySlippage(uint amount, uint allowedSlippage) internal pure returns(uint256){
@@ -62,7 +59,7 @@ abstract contract CurvePoolAdapter {
     }
 
     function lpForDola(uint amountDola) internal view returns(uint256){
-        uint[4] memory amounts = [amountDola, 0, 0 , 0];
-        return zapDepositor.calc_token_amount(crvMetapool, amounts, false);
+        uint[2] memory amounts = [amountDola, 0];
+        return crvMetapool.calc_token_amount(amounts, false);
     }
 }
