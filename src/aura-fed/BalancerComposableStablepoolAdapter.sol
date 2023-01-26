@@ -8,6 +8,11 @@ interface IBPT is IERC20{
     function getRate() external view returns (uint256);
 }
 
+interface IBalancerHelper{
+    function queryExit(bytes32 poolId, address sender, address recipient, IVault.ExitPoolRequest memory erp) external returns (uint256 bptIn, uint256[] memory amountsOut);
+    function queryJoin(bytes32 poolId, address sender, address recipient, IVault.JoinPoolRequest memory jrp) external returns (uint256 bptOut, uint256[] memory amountsIn);
+}
+
 contract BalancerComposableStablepoolAdapter {
     
     uint constant BPS = 10_000;
@@ -103,3 +108,4 @@ contract BalancerComposableStablepoolAdapter {
         return dolaAmount * 10**18 / bpt.getRate();
     }
 }
+

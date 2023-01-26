@@ -4,14 +4,15 @@ import "src/interfaces/IERC20.sol";
 import "src/interfaces/balancer/IVault.sol";
 import "src/interfaces/aura/IAuraLocker.sol";
 import "src/interfaces/aura/IAuraBalRewardPool.sol";
-import "src/aura-fed/BalancerAdapter.sol";
+import "src/aura-fed/BalancerComposableStablepoolAdapter.sol";
+import {BalancerStablepoolAdapter} from "src/aura-fed/BalancerStablepoolAdapter.sol";
 
 interface IAuraBooster {
     function depositAll(uint _pid, bool _stake) external;
     function withdraw(uint _pid, uint _amount) external;
 }
 
-contract AuraFed is BalancerComposableStablepoolAdapter{
+contract AuraStablepoolFed is BalancerStablepoolAdapter{
 
     IAuraBalRewardPool public dolaBptRewardPool;
     IAuraBooster public booster;
@@ -21,7 +22,7 @@ contract AuraFed is BalancerComposableStablepoolAdapter{
     address public guardian;
     address public gov;
     uint public dolaSupply;
-    uint public constant pid = 8; //Gauge pid, should never change
+    uint public constant pid = 45; //Gauge pid, should never change
     uint public maxLossExpansionBps;
     uint public maxLossWithdrawBps;
     uint public maxLossTakeProfitBps;
@@ -43,7 +44,7 @@ contract AuraFed is BalancerComposableStablepoolAdapter{
             uint maxLossWithdrawBps_,
             uint maxLossTakeProfitBps_,
             bytes32 poolId_) 
-            BalancerComposableStablepoolAdapter(poolId_, dola_, vault_)
+            BalancerStablepoolAdapter(poolId_, dola_, vault_)
     {
         require(maxLossExpansionBps_ < 10000, "Expansion max loss too high");
         require(maxLossWithdrawBps_ < 10000, "Withdraw max loss too high");
@@ -205,7 +206,7 @@ contract AuraFed is BalancerComposableStablepoolAdapter{
             require(dolaProfit > 0, "NO PROFIT");
             dola.transfer(gov, dolaProfit);
         }
-
+        _burnAndPay();
         require(dolaBptRewardPool.getReward(address(this), true), "Getting reward failed");
         bal.transfer(gov, bal.balanceOf(address(this)));
         aura.transfer(gov, aura.balanceOf(address(this)));
