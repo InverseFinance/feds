@@ -16,12 +16,12 @@ contract AuraComposableStablepoolFed is BalancerComposableStablepoolAdapter{
     IAuraBalRewardPool public dolaBptRewardPool;
     IAuraBooster public booster;
     IERC20 public bal;
-    IERC20 public aura;
+    IERC20 public constant aura = IERC20(0xC0c293ce456fF0ED870ADd98a0828Dd4d2903DBF);
     address public chair; // Fed Chair
     address public guardian;
     address public gov;
     uint public dolaSupply;
-    uint public constant pid = 8; //Gauge pid, should never change
+    uint public immutable pid; //Gauge pid, should never change
     uint public maxLossExpansionBps;
     uint public maxLossWithdrawBps;
     uint public maxLossTakeProfitBps;
@@ -31,8 +31,6 @@ contract AuraComposableStablepoolFed is BalancerComposableStablepoolAdapter{
     event Contraction(uint amount);
 
     constructor(
-            address dola_, 
-            address aura_,
             address vault_,
             address dolaBptRewardPool_, 
             address booster_,
@@ -42,16 +40,17 @@ contract AuraComposableStablepoolFed is BalancerComposableStablepoolAdapter{
             uint maxLossExpansionBps_,
             uint maxLossWithdrawBps_,
             uint maxLossTakeProfitBps_,
+            uint pid_,
             bytes32 poolId_) 
-            BalancerComposableStablepoolAdapter(poolId_, dola_, vault_)
+            BalancerComposableStablepoolAdapter(poolId_, 0x865377367054516e17014CcdED1e7d814EDC9ce4, vault_)
     {
         require(maxLossExpansionBps_ < 10000, "Expansion max loss too high");
         require(maxLossWithdrawBps_ < 10000, "Withdraw max loss too high");
         require(maxLossTakeProfitBps_ < 10000, "TakeProfit max loss too high");
         dolaBptRewardPool = IAuraBalRewardPool(dolaBptRewardPool_);
         booster = IAuraBooster(booster_);
-        aura = IERC20(aura_);
         bal = IERC20(dolaBptRewardPool.rewardToken());
+        pid = pid_;
         (address bpt,) = IVault(vault_).getPool(poolId_);
         IERC20(bpt).approve(booster_, type(uint256).max);
         maxLossExpansionBps = maxLossExpansionBps_;

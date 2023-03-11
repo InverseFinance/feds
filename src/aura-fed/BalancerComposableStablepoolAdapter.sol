@@ -18,7 +18,7 @@ contract BalancerComposableStablepoolAdapter {
     uint constant BPS = 10_000;
     bytes32 immutable poolId;
     IERC20 immutable dola;
-    IBPT immutable bpt = IBPT(0x5b3240B6BE3E7487d61cd1AFdFC7Fe4Fa1D81e64);
+    IBPT immutable bpt = IBPT(0x133d241F225750D2c92948E464A5a80111920331);
     IVault immutable vault;
     IVault.FundManagement fundMan;
     
