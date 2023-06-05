@@ -49,6 +49,13 @@ abstract contract MintingFed is BaseFed{
     function takeProfit(uint flag) override external virtual;
 
     /**
+     * @notice Function for calculating actual supply of claims, which may differ from the claims variable for a variety of reasons.
+     * @return claims The number of claims the address owns.
+     */
+    function claimsSupply() public view virtual returns(uint claims);
+        
+
+    /**
      * @notice Function for withdrawing underlying of Fed in emergency.
        Can be useful in case of Fed accounting errors, hacks of underlying market or accidents.
      * @dev Will likely destroy all contract accounting. Use carefully. Should send withdrawn tokens to gov.
@@ -103,7 +110,11 @@ abstract contract MintingFed is BaseFed{
      */
     function contraction(uint amount) onlyChair override external {
         (uint claimsUsed, uint dolaReceived) = _withdraw(amount);
-        claims -= claimsUsed;
+        if(claimsUsed > claims){
+            claims = 0;
+        } else {
+            claims -= claimsUsed;
+        }
         _repayDebt(dolaReceived);
     }
 
@@ -113,7 +124,11 @@ abstract contract MintingFed is BaseFed{
      */   
     function contractAll() onlyChair override external {
         (uint claimsUsed, uint dolaReceived) = _withdrawAll();
-        claims -= claimsUsed;
+        if(claimsUsed > claims){
+            claims = 0;
+        } else {
+            claims -= claimsUsed;
+        }
         _repayDebt(dolaReceived);
     }
 }

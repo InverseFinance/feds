@@ -14,11 +14,12 @@ abstract contract BaseFed {
     address public pendingGov;
     //Chair address allowed to perform expansions and contractions
     address public chair;
+    //Address of contract that is allowed to call the migrate functions
+    address public migrator;
 
     constructor(address _DOLA, address _gov, address _chair){
-        require(gov != address(0), "Gov set to 0");
+        require(_gov != address(0), "Gov set to 0");
         require(_DOLA != address(0), "Must be correct DOLA address");
-        require(block.chainid == 1, "Must mint DOLA on Mainnet");
         gov = _gov;
         chair = _chair;
         DOLA = IERC20(_DOLA);
@@ -35,6 +36,11 @@ abstract contract BaseFed {
 
     modifier onlyChair(){
         require(msg.sender == chair || msg.sender == gov, "NOT PERMISSIONED");
+        _;
+    }
+
+    modifier onlyMigrator(){
+        require(msg.sender == migrator, "ONLY MIGRATOR");
         _;
     }
 
@@ -65,6 +71,15 @@ abstract contract BaseFed {
     function setChair(address newChair) onlyGov external{
         chair = newChair;
         emit NewChair(newChair);
+    }
+
+    /**
+     * @notice Sets the migrator of the Fed
+     * @dev Should only be set if it's desired to migrate claims and debts to another fed
+     * @param newMigrator Address of the contract to migrate to
+     */
+    function setMigrator(address newMigrator) onlyGov external {
+        migrator = newMigrator;
     }
 
     /**
@@ -128,11 +143,33 @@ abstract contract BaseFed {
     function takeProfit(uint flag) external virtual;
 
     /**
-     * @notice Function for withdrawing underlying of Fed in emergency.
+     * @notice Withdraws claims from Fed in case of an emergency.
        Can be useful in case of Fed accounting errors, hacks of underlying market or accidents.
      * @dev Will likely destroy all contract accounting. Use carefully. Should send withdrawn tokens to gov.
      */
     function emergencyWithdraw() onlyGov external virtual{
+        revert("NOT IMPLEMENTED");
+    }
+
+    /**
+     * @notice Migrates both claims and debt to another fed from this one
+     * @dev Must send claims tokens to the new fed. This can be LP tokens, cTokens etc.
+     * @dev Must make sure accounting is correct, with the total number of claims and debt between feds staying the same after migration
+     * @param claimsToMigrate The number of claims to migrate to the other fed
+     * @return debtToMigrate The debt associated with the transfered claims
+     */
+    function migrateTo(uint claimsToMigrate) onlyMigrator external virtual returns(uint debtToMigrate){
+        revert("NOT IMPLEMENTED");
+    }
+
+    /**
+     * @notice Migrates both claims and debt from another fed to this one
+     * @dev Must call the migraTo function of the target fed
+     * @dev Must increment both claims and debt
+     * @param fed The address of the fed to migrate from
+     * @param claimsToMigrate The amount of claims to migrate from the target fed
+     */
+    function migrateFrom(address fed, uint claimsToMigrate) onlyChair external virtual {
         revert("NOT IMPLEMENTED");
     }
 

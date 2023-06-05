@@ -12,7 +12,7 @@ interface IMintable is IERC20 {
 }
 
 contract Swapper is BalancerComposableStablepoolAdapter {
-    constructor(bytes32 poolId_, address dola_, address vault_) BalancerComposableStablepoolAdapter(poolId_, dola_, vault_){}
+    constructor(address bpt_) {init(bpt_);}
 
     function swapExact(address assetIn, address assetOut, uint amount) public{
         swapExactIn(assetIn, assetOut, amount, 1);
@@ -33,7 +33,7 @@ contract AuraFedTest is DSTest{
     address minter = address(0xB);
     address gov = address(0x926dF14a23BE491164dCF93f4c468A50ef659D5B);
     uint maxLossExpansion = 20;
-    uint maxLossWithdraw = 20;
+    uint maxLossContraction = 20;
     uint maxLossTakeProfit = 20;
     bytes32 poolId = bytes32(0x5b3240b6be3e7487d61cd1afdfc7fe4fa1d81e6400000000000000000000037b);
     address holder = 0x4D2F01D281Dd0b98e75Ca3E1FdD36823B16a7dbf;
@@ -43,19 +43,17 @@ contract AuraFedTest is DSTest{
     function setUp() public {
         fed = new AuraFed(
             address(dola), 
-            address(aura), 
-            vault, 
             address(baseRewardPool),
+            address(bpt),
             booster,
             chair,
             guardian,
             gov,
             maxLossExpansion,
-            maxLossWithdraw,
-            maxLossTakeProfit,
-            poolId
+            maxLossContraction,
+            maxLossTakeProfit
         );
-        swapper = new Swapper(poolId, address(dola), vault);
+        swapper = new Swapper(address(bpt));
         vm.startPrank(gov);
         dola.addMinter(address(fed));
         dola.addMinter(minter);
@@ -64,17 +62,17 @@ contract AuraFedTest is DSTest{
 
     function testExpansion_succeed_whenExpandedWithinAcceptableSlippage() public {
         uint amount = 1 ether;     
-        uint initialDolaSupply = fed.dolaSupply();
-        uint initialbptSupply = fed.bptSupply();
+        uint initialDolaSupply = fed.debt();
+        uint initialbptSupply = fed.claims();
         uint initialDolaTotalSupply = dola.totalSupply();
 
         vm.prank(chair);
         fed.expansion(amount);
 
         assertEq(initialDolaTotalSupply + amount, dola.totalSupply());
-        assertEq(initialDolaSupply + amount, fed.dolaSupply());
+        assertEq(initialDolaSupply + amount, fed.debt());
         //TODO: Should have greater precision about the amount of balLP acquired
-        assertGt(fed.bptSupply(), initialbptSupply);
+        assertGt(fed.claims(), initialbptSupply);
     }
 
     function testFailExpansion_fail_whenExpandedOutsideAcceptableSlippage() public {
@@ -88,22 +86,22 @@ contract AuraFedTest is DSTest{
         uint amount = 1 ether;
         vm.prank(chair);
         fed.expansion(amount*2);
-        uint initialDolaSupply = fed.dolaSupply();
+        uint initialDolaSupply = fed.debt();
         uint initialDolaTotalSupply = dola.totalSupply();
-        uint initialBalLpSupply = fed.bptSupply();
+        uint initialBalLpSupply = fed.claims();
 
         vm.prank(chair);
         fed.contraction(amount);
 
         //Make sure basic accounting of contraction is correct:
-        assertGt(initialBalLpSupply, fed.bptSupply());
-        assertGt(initialDolaSupply, fed.dolaSupply());
+        assertGt(initialBalLpSupply, fed.claims());
+        assertGt(initialDolaSupply, fed.debt());
         assertGt(initialDolaTotalSupply, dola.totalSupply());
-        assertEq(initialDolaTotalSupply - dola.totalSupply(), initialDolaSupply - fed.dolaSupply());
+        assertEq(initialDolaTotalSupply - dola.totalSupply(), initialDolaSupply - fed.debt());
 
         //Make sure maxLoss wasn't exceeded
-        assertLe(initialDolaSupply-fed.dolaSupply(), amount*10_000/(10_000-maxLossWithdraw), "Amount withdrawn exceeds maxloss"); 
-        assertLe(initialDolaTotalSupply-dola.totalSupply(), amount*10_000/(10_000-maxLossWithdraw), "Amount withdrawn exceeds maxloss");
+        assertLe(initialDolaSupply-fed.debt(), amount*10_000/(10_000-maxLossContraction), "Amount withdrawn exceeds maxloss"); 
+        assertLe(initialDolaTotalSupply-dola.totalSupply(), amount*10_000/(10_000-maxLossContraction), "Amount withdrawn exceeds maxloss");
     }
 
     function testContraction_succeed_whenContractedWithProfit() public {
@@ -111,17 +109,17 @@ contract AuraFedTest is DSTest{
         vm.prank(chair);
         fed.expansion(amount);
         washTrade(100, 1000_000 ether);
-        uint initialDolaSupply = fed.dolaSupply();
+        uint initialDolaSupply = fed.debt();
         uint initialDolaTotalSupply = dola.totalSupply();
-        uint initialBalLpSupply = fed.bptSupply();
+        uint initialBalLpSupply = fed.claims();
         uint initialGovDola = dola.balanceOf(gov);
 
         vm.prank(chair);
         fed.contraction(amount);
 
         //Make sure basic accounting of contraction is correct:
-        assertGt(initialBalLpSupply, fed.bptSupply(), "BPT Supply didn't drop");
-        assertEq(initialDolaSupply-amount, fed.dolaSupply(), "Internal Dola Supply didn't drop by test amount");
+        assertGt(initialBalLpSupply, fed.claims(), "BPT Supply didn't drop");
+        assertEq(initialDolaSupply-amount, fed.debt(), "Internal Dola Supply didn't drop by test amount");
         assertEq(initialDolaTotalSupply, dola.totalSupply()+amount, "Total Dola Supply didn't drop by test amount");
         assertGt(dola.balanceOf(gov), initialGovDola, "Gov dola balance isn't higher");
     }
@@ -129,9 +127,9 @@ contract AuraFedTest is DSTest{
     function testContractAll_succeed_whenContractedWithinAcceptableSlippage() public {
         vm.prank(chair);
         fed.expansion(1000 ether);
-        uint initialDolaSupply = fed.dolaSupply();
+        uint initialDolaSupply = fed.debt();
         uint initialDolaTotalSupply = dola.totalSupply();
-        uint initialBalLpSupply = fed.bptSupply();
+        uint initialBalLpSupply = fed.claims();
 
         vm.prank(chair);
         fed.contractAll();
@@ -140,30 +138,30 @@ contract AuraFedTest is DSTest{
         assertLe(initialDolaTotalSupply-initialDolaSupply, dola.totalSupply());
 
         //Make sure maxLoss wasn't exceeded
-        assertLe(initialDolaSupply-fed.dolaSupply(), initialDolaSupply*10_000/(10_000-maxLossWithdraw), "Amount withdrawn exceeds maxloss"); 
-        assertLe(initialDolaTotalSupply-dola.totalSupply(), initialDolaSupply*10_000/(10_000-maxLossWithdraw), "Amount withdrawn exceeds maxloss");
+        assertLe(initialDolaSupply-fed.debt(), initialDolaSupply*10_000/(10_000-maxLossContraction), "Amount withdrawn exceeds maxloss"); 
+        assertLe(initialDolaTotalSupply-dola.totalSupply(), initialDolaSupply*10_000/(10_000-maxLossContraction), "Amount withdrawn exceeds maxloss");
         uint percentageToWithdraw = 10**18;
-        uint percentageActuallyWithdrawnBal = initialBalLpSupply * 10**18 / (initialBalLpSupply - fed.bptSupply());
-        assertLe(percentageActuallyWithdrawnBal * (10_000 - maxLossWithdraw) / 10_000, percentageToWithdraw, "Too much bpt spent");
+        uint percentageActuallyWithdrawnBal = initialBalLpSupply * 10**18 / (initialBalLpSupply - fed.claims());
+        assertLe(percentageActuallyWithdrawnBal * (10_000 - maxLossContraction) / 10_000, percentageToWithdraw, "Too much bpt spent");
     }
 
     function testContractAll_succeed_whenContractedWithProfit() public {
         vm.prank(chair);
         fed.expansion(1000 ether);
         washTrade(100, 100_000 ether);
-        uint initialDolaSupply = fed.dolaSupply();
+        uint initialDolaSupply = fed.debt();
         uint initialDolaTotalSupply = dola.totalSupply();
         uint initialGovDola = dola.balanceOf(gov);
-        uint initialBalLpSupply = fed.bptSupply();
+        uint initialBalLpSupply = fed.claims();
 
         vm.prank(chair);
         fed.contractAll();
 
         //Make sure basic accounting of contraction is correct:
         assertEq(initialDolaTotalSupply-initialDolaSupply, dola.totalSupply(), "Dola supply was not decreased by initialDolaSupply");
-        assertEq(fed.dolaSupply(), 0);
-        assertEq(fed.bptSupply(), 0);
-        assertGt(initialBalLpSupply, fed.bptSupply());
+        assertEq(fed.debt(), 0);
+        assertEq(fed.claims(), 0);
+        assertGt(initialBalLpSupply, fed.claims());
         assertGt(dola.balanceOf(gov), initialGovDola);
     }
 
@@ -173,14 +171,14 @@ contract AuraFedTest is DSTest{
         fed.expansion(1000 ether);
         uint initialAura = aura.balanceOf(gov);
         uint initialAuraBal = bal.balanceOf(gov);
-        uint initialBalLpSupply = fed.bptSupply();
+        uint initialBalLpSupply = fed.claims();
         uint initialGovDola = dola.balanceOf(gov);
-        fed.takeProfit(true);
+        fed.takeProfit(1);
         vm.stopPrank();
 
         assertEq(aura.balanceOf(gov), initialAura, "treasury aura balance didn't increase");
         assertEq(bal.balanceOf(gov), initialAuraBal, "treasury bal balance din't increase");
-        assertEq(initialBalLpSupply, fed.bptSupply());
+        assertEq(initialBalLpSupply, fed.claims());
         assertEq(dola.balanceOf(gov), initialGovDola);
     }
 
@@ -189,18 +187,18 @@ contract AuraFedTest is DSTest{
         fed.expansion(1000 ether);
         uint initialAura = aura.balanceOf(gov);
         uint initialAuraBal = bal.balanceOf(gov);
-        uint initialBalLpSupply = fed.bptSupply();
+        uint initialBalLpSupply = fed.claims();
         uint initialGovDola = dola.balanceOf(gov);
         //Pass time
         washTrade(100, 10_000 ether);
         vm.warp(baseRewardPool.periodFinish() + 1);
         vm.startPrank(chair);
-        fed.takeProfit(false);
+        fed.takeProfit(0);
         vm.stopPrank();
 
         assertGt(aura.balanceOf(gov), initialAura, "treasury aura balance didn't increase");
         assertGt(bal.balanceOf(gov), initialAuraBal, "treasury bal balance din't increase");
-        assertEq(initialBalLpSupply, fed.bptSupply(), "bpt supply changed");
+        assertEq(initialBalLpSupply, fed.claims(), "bpt supply changed");
         assertEq(dola.balanceOf(gov), initialGovDola, "Gov DOLA supply changed");
     }
     
@@ -214,20 +212,20 @@ contract AuraFedTest is DSTest{
         vm.startPrank(chair);
         uint initialAura = aura.balanceOf(gov);
         uint initialAuraBal = bal.balanceOf(gov);
-        uint initialBalLpSupply = fed.bptSupply();
+        uint initialBalLpSupply = fed.claims();
         uint initialGovDola = dola.balanceOf(gov);
         fed.contraction(200 ether);
-        assertEq(fed.dolaSupply(), 0);
+        assertEq(fed.debt(), 0);
         //Pass time
         washTrade(100, 10_000 ether);
         vm.warp(baseRewardPool.periodFinish() + 1);
         vm.startPrank(chair);
-        fed.takeProfit(true);
+        fed.takeProfit(1);
         vm.stopPrank();
 
         assertGt(aura.balanceOf(gov), initialAura, "treasury aura balance didn't increase");
         assertGt(bal.balanceOf(gov), initialAuraBal, "treasury bal balance din't increase");
-        assertGt(initialBalLpSupply, fed.bptSupply(), "bpt Supply wasn't reduced");
+        assertGt(initialBalLpSupply, fed.claims(), "bpt Supply wasn't reduced");
         assertGt(dola.balanceOf(gov), initialGovDola, "Gov DOLA balance didn't increase");
     }
 
@@ -239,8 +237,8 @@ contract AuraFedTest is DSTest{
         dola.mint(address(minter), 1000 ether);
         dola.approve(address(fed), 1000 ether);
 
-        fed.burnRemainingDolaSupply();
-        assertEq(fed.dolaSupply(), 0);
+        fed.repayDebt(fed.debt());
+        assertEq(fed.debt(), 0);
     }
 
     function testContraction_FailWithOnlyChair_whenCalledByOtherAddress() public {
@@ -259,14 +257,14 @@ contract AuraFedTest is DSTest{
         assertTrue(initial != fed.maxLossExpansionBps());
     }
 
-    function testSetMaxLossWithdrawBps_succeed_whenCalledByGov() public {
-        uint initial = fed.maxLossWithdrawBps();
+    function testSetMaxLossContractionBps_succeed_whenCalledByGov() public {
+        uint initial = fed.maxLossContractionBps();
         
         vm.prank(gov);
-        fed.setMaxLossWithdrawBps(1);
+        fed.setMaxLossContractionBps(1);
 
-        assertEq(fed.maxLossWithdrawBps(), 1);
-        assertTrue(initial != fed.maxLossWithdrawBps());
+        assertEq(fed.maxLossContractionBps(), 1);
+        assertTrue(initial != fed.maxLossContractionBps());
     }
 
     function testSetMaxLossTakeProfitBps_succeed_whenCalledByGov() public {
@@ -288,16 +286,16 @@ contract AuraFedTest is DSTest{
         assertEq(fed.maxLossExpansionBps(), initial);
     }
 
-    function testSetMaxLossWithdrawBps_fail_whenCalledByGov() public {
-        uint initial = fed.maxLossWithdrawBps();
+    function testSetMaxLossContractionBps_fail_whenNotCalledByGov() public {
+        uint initial = fed.maxLossContractionBps();
         
         vm.expectRevert("ONLY GOV");
-        fed.setMaxLossWithdrawBps(1);
+        fed.setMaxLossContractionBps(1);
 
-        assertEq(fed.maxLossWithdrawBps(), initial);
+        assertEq(fed.maxLossContractionBps(), initial);
     }
 
-    function testSetMaxLossTakeProfitBps_fail_whenCalledByGov() public {
+    function testSetMaxLossTakeProfitBps_fail_whenNotCalledByGov() public {
         uint initial = fed.maxLossTakeProfitBps();
         
         vm.expectRevert("ONLY GOV");

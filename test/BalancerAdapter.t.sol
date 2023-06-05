@@ -10,7 +10,7 @@ interface IMintable is IERC20 {
 }
 
 contract Swapper is BalancerComposableStablepoolAdapter {
-    constructor(bytes32 poolId_, address dola_, address vault_) BalancerComposableStablepoolAdapter(poolId_, dola_, vault_){}
+    constructor(address bpt_) {init(bpt_);}
 
     function swapExact(address assetIn, address assetOut, uint amount) public{
         swapExactIn(assetIn, assetOut, amount, 1);
@@ -30,7 +30,7 @@ contract BalancerTest is DSTest{
     Swapper swapper;
 
     function setUp() public {
-        swapper = new Swapper(poolId, address(dola), vault);
+        swapper = new Swapper(address(bpt));
         vm.prank(gov);
         dola.addMinter(minter);
     }
