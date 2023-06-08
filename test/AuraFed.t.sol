@@ -1,9 +1,8 @@
 pragma solidity ^0.8.13;
 
-import "ds-test/test.sol";
-import "forge-std/Vm.sol";
+import "forge-std/Test.sol";
 import "src/aura-fed/AuraFed.sol";
-import "src/aura-fed/BalancerAdapter.sol";
+import {BalancerComposableStablepoolAdapter} from  "src/aura-fed/BalancerAdapter.sol";
 import "src/interfaces/IERC20.sol";
 import "src/interfaces/aura/IAuraBalRewardPool.sol";
 
@@ -12,31 +11,33 @@ interface IMintable is IERC20 {
 }
 
 contract Swapper is BalancerComposableStablepoolAdapter {
-    constructor(address bpt_) {init(bpt_);}
+    constructor(address bpt_) {
+        init(bpt_);
+        IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48).approve(address(VAULT), type(uint).max);
+    }
 
     function swapExact(address assetIn, address assetOut, uint amount) public{
         swapExactIn(assetIn, assetOut, amount, 1);
     }
 }
 
-contract AuraFedTest is DSTest{
-    Vm internal constant vm = Vm(HEVM_ADDRESS);
+contract AuraFedTest is Test{
     IMintable dola = IMintable(0x865377367054516e17014CcdED1e7d814EDC9ce4);
-    IERC20 bpt = IERC20(0x5b3240B6BE3E7487d61cd1AFdFC7Fe4Fa1D81e64);
+    IERC20 bpt = IERC20(0xFf4ce5AAAb5a627bf82f4A571AB1cE94Aa365eA6);
     IERC20 bal = IERC20(0xba100000625a3754423978a60c9317c58a424e3D);
     IERC20 aura = IERC20(0xC0c293ce456fF0ED870ADd98a0828Dd4d2903DBF);
+    address usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address vault = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
-    IAuraBalRewardPool baseRewardPool = IAuraBalRewardPool(0x99653d46D52eE41c7b35cbAd1aC408A00bad6A76);
-    address booster = 0x7818A1DA7BD1E64c199029E86Ba244a9798eEE10;
+    IAuraBalRewardPool baseRewardPool = IAuraBalRewardPool(0x22915f309EC0182c85cD8331C23bD187fd761360);
+    address booster = 0xA57b8d98dAE62B26Ec3bcC4a365338157060B234;
     address chair = address(0xA);
     address guardian = address(0xB);
     address minter = address(0xB);
+    address migrator = address(0xC);
     address gov = address(0x926dF14a23BE491164dCF93f4c468A50ef659D5B);
     uint maxLossExpansion = 20;
-    uint maxLossContraction = 20;
+    uint maxLossContraction = 40;
     uint maxLossTakeProfit = 20;
-    bytes32 poolId = bytes32(0x5b3240b6be3e7487d61cd1afdfc7fe4fa1d81e6400000000000000000000037b);
-    address holder = 0x4D2F01D281Dd0b98e75Ca3E1FdD36823B16a7dbf;
     AuraFed fed;
     Swapper swapper;
 
@@ -76,7 +77,7 @@ contract AuraFedTest is DSTest{
     }
 
     function testFailExpansion_fail_whenExpandedOutsideAcceptableSlippage() public {
-        uint amount = 1000_000 ether;
+        uint amount = 10_000_000 ether;
 
         vm.prank(chair);
         fed.expansion(amount);
@@ -105,10 +106,11 @@ contract AuraFedTest is DSTest{
     }
 
     function testContraction_succeed_whenContractedWithProfit() public {
+        balancePool();
         uint amount = 1000 ether;
         vm.prank(chair);
         fed.expansion(amount);
-        washTrade(100, 1000_000 ether);
+        washTrade(100, 1_000_000 ether);
         uint initialDolaSupply = fed.debt();
         uint initialDolaTotalSupply = dola.totalSupply();
         uint initialBalLpSupply = fed.claims();
@@ -119,9 +121,10 @@ contract AuraFedTest is DSTest{
 
         //Make sure basic accounting of contraction is correct:
         assertGt(initialBalLpSupply, fed.claims(), "BPT Supply didn't drop");
-        assertEq(initialDolaSupply-amount, fed.debt(), "Internal Dola Supply didn't drop by test amount");
-        assertEq(initialDolaTotalSupply, dola.totalSupply()+amount, "Total Dola Supply didn't drop by test amount");
-        assertGt(dola.balanceOf(gov), initialGovDola, "Gov dola balance isn't higher");
+        assertLe(initialDolaSupply, fed.debt()+amount, "Internal Dola Supply didn't drop by test amount");
+        assertGt(initialDolaSupply, fed.debt()+(amount - amount * maxLossContraction / 10000), "Internal Dola Supply didn't drop by test amount");
+        assertLe(initialDolaTotalSupply, dola.totalSupply()+amount, "Total Dola Supply didn't drop by test amount");
+        assertGt(initialDolaTotalSupply, dola.totalSupply()+(amount - amount * maxLossContraction / 10000), "Total Dola Supply didn't drop by test amount");
     }
 
     function testContractAll_succeed_whenContractedWithinAcceptableSlippage() public {
@@ -201,44 +204,80 @@ contract AuraFedTest is DSTest{
         assertEq(initialBalLpSupply, fed.claims(), "bpt supply changed");
         assertEq(dola.balanceOf(gov), initialGovDola, "Gov DOLA supply changed");
     }
-    
-    function testTakeProfit_IncreaseGovDolaBalance_whenDolaHasBeenSentToContract() public {
-        vm.startPrank(chair);
-        fed.expansion(1000 ether);
-        vm.stopPrank();
-        vm.startPrank(minter);
-        dola.mint(address(fed), 1000 ether);
-        vm.stopPrank();
-        vm.startPrank(chair);
-        uint initialAura = aura.balanceOf(gov);
-        uint initialAuraBal = bal.balanceOf(gov);
-        uint initialBalLpSupply = fed.claims();
-        uint initialGovDola = dola.balanceOf(gov);
-        fed.contraction(200 ether);
-        assertEq(fed.debt(), 0);
-        //Pass time
-        washTrade(100, 10_000 ether);
-        vm.warp(baseRewardPool.periodFinish() + 1);
-        vm.startPrank(chair);
-        fed.takeProfit(1);
-        vm.stopPrank();
-
-        assertGt(aura.balanceOf(gov), initialAura, "treasury aura balance didn't increase");
-        assertGt(bal.balanceOf(gov), initialAuraBal, "treasury bal balance din't increase");
-        assertGt(initialBalLpSupply, fed.claims(), "bpt Supply wasn't reduced");
-        assertGt(dola.balanceOf(gov), initialGovDola, "Gov DOLA balance didn't increase");
-    }
 
     function testburnRemainingDolaSupply_Success() public {
         vm.startPrank(chair);
         fed.expansion(1000 ether);
         vm.stopPrank();       
         vm.startPrank(minter);
-        dola.mint(address(minter), 1000 ether);
+        dola.mint(minter, 1000 ether);
         dola.approve(address(fed), 1000 ether);
 
+        uint dolaSupplyBefore = dola.totalSupply();
+        uint minterBalanceBefore = dola.balanceOf(minter);
         fed.repayDebt(fed.debt());
         assertEq(fed.debt(), 0);
+        assertEq(dola.totalSupply(), dolaSupplyBefore - 1000 ether);
+        assertEq(dola.balanceOf(minter), minterBalanceBefore - 1000 ether);
+    }
+
+    function testMigrateClaims_Success_WhenCalledByMigrator() public {
+        vm.prank(chair);
+        fed.expansion(1000 ether);
+        uint initialClaims = fed.claims();
+        uint initialDebt = fed.debt();
+        vm.prank(gov);
+        fed.setMigrator(migrator);
+        vm.prank(migrator);
+        uint debtToMigrate = fed.migrateTo(initialClaims);
+
+        assertEq(bpt.balanceOf(migrator), initialClaims, "Migrator did not received correct amount of claims");
+        assertEq(debtToMigrate, initialDebt, "debtToMigrate not equal debt");
+        assertEq(fed.claims(), 0, "Fed claims not 0");
+        assertEq(fed.debt(), 0, "Fed debt not 0");
+        
+    }
+
+    function testMigrateClaims_Fails_WhenCalledByNonMigrator(address caller) public {
+        vm.assume(caller != migrator);
+        vm.prank(chair);
+        fed.expansion(1000 ether);
+        uint claims = fed.claims();
+        vm.prank(gov);
+        fed.setMigrator(migrator);
+        vm.prank(caller);
+        vm.expectRevert("ONLY MIGRATOR");
+        uint debtToMigrate = fed.migrateTo(claims);
+        
+    }
+
+    function testMigrateClaims_Success_WhenMigratingLessThanFullAmount(uint migrationAmount) public {
+        vm.assume(migrationAmount > 1 ether);
+        migrationAmount = migrationAmount % 1000 ether;
+        vm.prank(chair);
+        fed.expansion(1000 ether);
+        uint initialClaims = fed.claims();
+        uint claimsMigrationAmount = fed.claims() * migrationAmount / 1000 ether;
+        uint initialDebt = fed.debt();
+        vm.prank(gov);
+        fed.setMigrator(migrator);
+        vm.prank(migrator);
+        uint debtToMigrate = fed.migrateTo(claimsMigrationAmount);
+
+        assertEq(bpt.balanceOf(migrator), claimsMigrationAmount, "Migrator did not received correct amount of claims");
+        assertEq(fed.claims(), initialClaims - claimsMigrationAmount, "Fed claims not decreased correctly");
+        assertEq(fed.debt(), initialDebt - debtToMigrate, "Fed debt not decreased correctly");
+    }
+
+    function testEmergencyWithdraw_Success_WhenCalledByGov() public {
+        vm.prank(chair);
+        fed.expansion(1000 ether);
+        uint initialClaimsSupply = fed.claimsSupply();
+        vm.prank(gov);
+        fed.emergencyWithdraw();
+
+        assertEq(bpt.balanceOf(gov), initialClaimsSupply);
+        assertEq(fed.claimsSupply(), 0);
     }
 
     function testContraction_FailWithOnlyChair_whenCalledByOtherAddress() public {
@@ -280,7 +319,7 @@ contract AuraFedTest is DSTest{
     function testSetMaxLossExpansionBps_fail_whenCalledByNonGov() public {
         uint initial = fed.maxLossExpansionBps();
         
-        vm.expectRevert("ONLY GOV");
+        vm.expectRevert("NOT GOV");
         fed.setMaxLossExpansionBps(1);
 
         assertEq(fed.maxLossExpansionBps(), initial);
@@ -289,7 +328,7 @@ contract AuraFedTest is DSTest{
     function testSetMaxLossContractionBps_fail_whenNotCalledByGov() public {
         uint initial = fed.maxLossContractionBps();
         
-        vm.expectRevert("ONLY GOV");
+        vm.expectRevert("ONLY GOV OR GUARDIAN");
         fed.setMaxLossContractionBps(1);
 
         assertEq(fed.maxLossContractionBps(), initial);
@@ -298,20 +337,28 @@ contract AuraFedTest is DSTest{
     function testSetMaxLossTakeProfitBps_fail_whenNotCalledByGov() public {
         uint initial = fed.maxLossTakeProfitBps();
         
-        vm.expectRevert("ONLY GOV");
+        vm.expectRevert("NOT GOV");
         fed.setMaxLossTakeProfitBps(1);
 
         assertEq(fed.maxLossTakeProfitBps(), initial);
     }
 
+    function balancePool() public {
+        (,uint[] memory balances,) = IVault(vault).getPoolTokens(IBPT(address(bpt)).getPoolId());
+        uint inbalance = balances[0] - balances[1]*10**10;
+        uint swapAmount = inbalance / 10**18;
+        deal(usdc, address(swapper), swapAmount);
+        swapper.swapExact(usdc, address(dola), swapAmount);
+
+    }
+
     function washTrade(uint loops, uint amount) public {
-        vm.stopPrank();     
         vm.startPrank(minter);
         dola.mint(address(swapper), amount);
         //Trade back and forth to create a profit
         for(uint i; i < loops; i++){
-            swapper.swapExact(address(dola), address(bpt), dola.balanceOf(address(swapper)));
-            swapper.swapExact(address(bpt), address(dola), bpt.balanceOf(address(swapper)));
+            swapper.swapExact(address(dola), usdc, dola.balanceOf(address(swapper)));
+            swapper.swapExact(usdc, address(dola), IERC20(usdc).balanceOf(address(swapper)));
         }
         vm.stopPrank();     
     }

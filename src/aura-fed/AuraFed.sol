@@ -4,7 +4,7 @@ import "src/interfaces/IERC20.sol";
 import "src/interfaces/balancer/IVault.sol";
 import "src/interfaces/aura/IAuraLocker.sol";
 import "src/interfaces/aura/IAuraBalRewardPool.sol";
-import "src/aura-fed/BalancerAdapter.sol";
+import "src/aura-fed/BalancerStablepoolAdapter.sol";
 import "src/MintingFed.sol";
 import "src/LossyFed.sol";
 
@@ -13,13 +13,13 @@ interface IAuraBooster {
     function withdraw(uint _guagePid, uint _amount) external;
 }
 
-contract AuraFed is BalancerComposableStablepoolAdapter, LossyFed {
+contract AuraFed is BalancerStablepoolAdapter, LossyFed {
 
     IAuraBalRewardPool public dolaBptRewardPool;
     IAuraBooster public booster;
     IERC20 public constant BAL = IERC20(0xba100000625a3754423978a60c9317c58a424e3D);
     IERC20 public constant AURA = IERC20(0xC0c293ce456fF0ED870ADd98a0828Dd4d2903DBF);
-    uint public constant guagePid = 8;
+    uint public constant guagePid = 45;
 
     constructor(
             address dola_, 
@@ -47,7 +47,6 @@ contract AuraFed is BalancerComposableStablepoolAdapter, LossyFed {
      */
     function _deposit(uint dolaAmount) internal override returns(uint claimsReceived) {
         require(msg.sender == chair, "ONLY CHAIR");
-        DOLA.mint(address(this), dolaAmount);
         claimsReceived = _addLiquidity(dolaAmount, maxLossExpansionBps);
         booster.depositAll(guagePid, true);
     }
@@ -139,6 +138,7 @@ contract AuraFed is BalancerComposableStablepoolAdapter, LossyFed {
      * @notice Migrates claims tokens and debt to the Migrator fed contract
      * @dev The calling migrator must increment its debt by amount returned by this call
      * @param claimsToMigrate Amount of claims tokens to migrate
+     * @return Amount of debt to migrate
      */
     function migrateTo(uint claimsToMigrate) onlyMigrator override external returns(uint){
         uint totalClaims = claimsSupply();
@@ -146,6 +146,8 @@ contract AuraFed is BalancerComposableStablepoolAdapter, LossyFed {
         uint claimsToUnstake =  claimsToMigrate - BPT.balanceOf(address(this));
         require(dolaBptRewardPool.withdrawAndUnwrap(claimsToUnstake, false), "AURA WITHDRAW FAILED");
         uint debtToMigrate = debt * claimsToMigrate / totalClaims;
+        debt -= debtToMigrate;
+        claims -= claimsToMigrate;
         BPT.transfer(migrator, claimsToMigrate);
         return debtToMigrate;
     }
