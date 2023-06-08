@@ -10,6 +10,7 @@ import {BalancerStablepoolAdapter} from "src/aura-fed/BalancerStablepoolAdapter.
 interface IAuraBooster {
     function depositAll(uint _pid, bool _stake) external;
     function withdraw(uint _pid, uint _amount) external;
+    function poolInfo(uint _pid) external returns(address lptoken, address token, address gauge, address crvRewards, address stash, bool shutdown);
 }
 
 contract AuraStablepoolFed is BalancerStablepoolAdapter{
@@ -22,7 +23,7 @@ contract AuraStablepoolFed is BalancerStablepoolAdapter{
     address public guardian;
     address public gov;
     uint public dolaSupply;
-    uint public constant pid = 45; //Gauge pid, should never change
+    uint public constant pid = 122; //Gauge pid, should never change
     uint public maxLossExpansionBps;
     uint public maxLossWithdrawBps;
     uint public maxLossTakeProfitBps;
@@ -35,7 +36,6 @@ contract AuraStablepoolFed is BalancerStablepoolAdapter{
             address dola_, 
             address aura_,
             address vault_,
-            address dolaBptRewardPool_, 
             address booster_,
             address chair_,
             address guardian_,
@@ -49,10 +49,8 @@ contract AuraStablepoolFed is BalancerStablepoolAdapter{
         require(maxLossExpansionBps_ < 10000, "Expansion max loss too high");
         require(maxLossWithdrawBps_ < 10000, "Withdraw max loss too high");
         require(maxLossTakeProfitBps_ < 10000, "TakeProfit max loss too high");
-        dolaBptRewardPool = IAuraBalRewardPool(dolaBptRewardPool_);
         booster = IAuraBooster(booster_);
         aura = IERC20(aura_);
-        bal = IERC20(dolaBptRewardPool.rewardToken());
         (address bpt,) = IVault(vault_).getPool(poolId_);
         IERC20(bpt).approve(booster_, type(uint256).max);
         maxLossExpansionBps = maxLossExpansionBps_;
@@ -115,6 +113,15 @@ contract AuraStablepoolFed is BalancerStablepoolAdapter{
         require(newMaxLossSetableByGuardian < 10000);
         maxLossSetableByGuardian = newMaxLossSetableByGuardian;
     }
+
+    function setBaseRewardPool() public {
+        require(msg.sender == chair, "ONLY CHAIR");
+        require(address(dolaBptRewardPool) == address(0), "Already set");
+        (,,,address baseRewardPoolAddress,,) = booster.poolInfo(pid);    
+        dolaBptRewardPool = IAuraBalRewardPool(baseRewardPoolAddress);
+        bal = IERC20(dolaBptRewardPool.rewardToken());
+    }
+
     /**
     @notice Deposits amount of dola tokens into balancer, before locking with aura
     @param amount Amount of dola token to deposit

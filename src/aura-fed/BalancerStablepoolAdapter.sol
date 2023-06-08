@@ -16,13 +16,13 @@ interface IBalancerHelper{
 contract BalancerStablepoolAdapter {
 
     uint constant BPS = 10_000;
-    bytes32 immutable poolId;
-    IERC20 dola;
-    IERC20 usdc = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    bytes32 immutable public poolId;
+    IERC20 public dola;
+    IERC20 public usdc = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     //IBPT immutable bbAUSD = IBPT(0xA13a9247ea42D743238089903570127DdA72fE44);
     //IBalancerHelper helper = IBalancerHelper(0x5aDDCCa35b7A0D07C74063c48700C8590E87864E);
-    IBPT immutable bpt = IBPT(0xFf4ce5AAAb5a627bf82f4A571AB1cE94Aa365eA6);
-    IVault vault;
+    IBPT immutable public bpt = IBPT(0xFf4ce5AAAb5a627bf82f4A571AB1cE94Aa365eA6);
+    IVault public vault;
     IAsset[] assets = new IAsset[](0);
     uint dolaIndex = type(uint).max;
 

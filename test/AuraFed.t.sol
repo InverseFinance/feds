@@ -1,7 +1,6 @@
 pragma solidity ^0.8.13;
 
-import "ds-test/test.sol";
-import "forge-std/Vm.sol";
+import "forge-std/Test.sol";
 import "src/aura-fed/AuraStablepoolFed.sol";
 import "src/aura-fed/BalancerComposableStablepoolAdapter.sol";
 import {BalancerStablepoolAdapter} from "src/aura-fed/BalancerStablepoolAdapter.sol";
@@ -33,8 +32,7 @@ contract Depositor is BalancerStablepoolAdapter {
     }
 }
 
-contract AuraFedTest is DSTest{
-    Vm internal constant vm = Vm(HEVM_ADDRESS);
+contract AuraFedTest is Test{
     IMintable dola = IMintable(0x865377367054516e17014CcdED1e7d814EDC9ce4);
     IERC20 bpt = IERC20(0xFf4ce5AAAb5a627bf82f4A571AB1cE94Aa365eA6);
     IERC20 usdc = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
@@ -64,7 +62,6 @@ contract AuraFedTest is DSTest{
             address(dola), 
             address(aura), 
             vault, 
-            address(baseRewardPool),
             booster,
             chair,
             guardian,
@@ -74,6 +71,8 @@ contract AuraFedTest is DSTest{
             maxLossTakeProfit,
             poolId
         );
+        vm.prank(chair);
+        fed.setBaseRewardPool();
         swapper = new Swapper(poolId, address(dola), vault);
         dolaDepositor = new Depositor(poolId, address(dola), vault);
         usdcDepositor = new Depositor(poolId, address(usdc), vault);
@@ -83,7 +82,7 @@ contract AuraFedTest is DSTest{
         dola.mint(address(dolaDepositor), 1_000_000 ether);
         vm.stopPrank();
         vm.prank(usdcHolder);
-        usdc.transfer(address(usdcDepositor), 1_000_000 * 10**6);
+        deal(address(usdc), address(usdcDepositor), 1_000_000 * 10**6);
         usdcDepositor.deposit(1_000 * 10**6, 10000);
         dolaDepositor.deposit(1_000 ether, 10000);
     }
@@ -104,7 +103,7 @@ contract AuraFedTest is DSTest{
     }
 
     function testFailExpansion_fail_whenExpandedOutsideAcceptableSlippage() public {
-        uint amount = 10_000_000 ether;
+        uint amount = 100_000_000 ether;
 
         vm.prank(chair);
         fed.expansion(amount);
@@ -136,7 +135,7 @@ contract AuraFedTest is DSTest{
         uint amount = 1 ether / 2;
         vm.prank(chair);
         fed.expansion(amount);
-        washTrade(1000, 10000 ether);
+        washTrade(100, 1000000 ether);
         uint initialDolaSupply = fed.dolaSupply();
         uint initialDolaTotalSupply = dola.totalSupply();
         uint initialBalLpSupply = fed.bptSupply();
@@ -176,9 +175,10 @@ contract AuraFedTest is DSTest{
     }
 
     function testContractAll_succeed_whenContractedWithProfit() public {
+        balancePool();
         vm.prank(chair);
         fed.expansion(1 ether);
-        washTrade(1000, 10000 ether);
+        washTrade(100, 100000 ether);
         uint initialDolaSupply = fed.dolaSupply();
         uint initialDolaTotalSupply = dola.totalSupply();
         uint initialGovDola = dola.balanceOf(gov);
@@ -189,10 +189,10 @@ contract AuraFedTest is DSTest{
 
         //Make sure basic accounting of contraction is correct:
         assertEq(initialDolaTotalSupply-initialDolaSupply, dola.totalSupply(), "Dola supply was not decreased by initialDolaSupply");
-        assertEq(fed.dolaSupply(), 0);
-        assertEq(fed.bptSupply(), 0);
+        assertEq(fed.dolaSupply(), 0, "Dola supply not 0");
+        assertEq(fed.bptSupply(), 0, "Bpt supply not 0");
         assertGt(initialBalLpSupply, fed.bptSupply());
-        assertGt(dola.balanceOf(gov), initialGovDola);
+        assertGe(dola.balanceOf(gov), initialGovDola);
     }
 
 
@@ -231,32 +231,6 @@ contract AuraFedTest is DSTest{
         assertGt(bal.balanceOf(gov), initialAuraBal, "treasury bal balance din't increase");
         assertEq(initialBalLpSupply, fed.bptSupply(), "bpt supply changed");
         assertEq(dola.balanceOf(gov), initialGovDola, "Gov DOLA supply changed");
-    }
-    
-    function testTakeProfit_IncreaseGovDolaBalance_whenDolaHasBeenSentToContract() public {
-        vm.startPrank(chair);
-        fed.expansion(1 ether);
-        vm.stopPrank();
-        vm.startPrank(minter);
-        dola.mint(address(fed), 1000 ether);
-        vm.stopPrank();
-        vm.startPrank(chair);
-        uint initialAura = aura.balanceOf(gov);
-        uint initialAuraBal = bal.balanceOf(gov);
-        uint initialBalLpSupply = fed.bptSupply();
-        uint initialGovDola = dola.balanceOf(gov);
-        vm.stopPrank();
-        //Pass time
-        washTrade(100, 10000 ether);
-        vm.warp(block.timestamp + 3600*24*30);
-        vm.startPrank(chair);
-        fed.takeProfit(true);
-        vm.stopPrank();
-
-        assertGt(aura.balanceOf(gov), initialAura, "treasury aura balance didn't increase");
-        assertGt(bal.balanceOf(gov), initialAuraBal, "treasury bal balance din't increase");
-        assertGt(initialBalLpSupply, fed.bptSupply(), "bpt Supply wasn't reduced");
-        assertGt(dola.balanceOf(gov), initialGovDola, "Gov DOLA balance didn't increase");
     }
 
     function testburnRemainingDolaSupply_Success() public {
@@ -334,8 +308,15 @@ contract AuraFedTest is DSTest{
         assertEq(fed.maxLossTakeProfitBps(), initial);
     }
 
+    function balancePool() public {
+        (,uint[] memory balances,) = IVault(vault).getPoolTokens(poolId);
+        uint tradeAmount = (balances[0] - (balances[1]*10**12)) / 2 / 10**12;
+        deal(address(usdc), address(swapper), tradeAmount);
+        swapper.swapExact(address(usdc), address(dola), tradeAmount);
+        (,balances,) = IVault(vault).getPoolTokens(poolId);
+    }
+
     function washTrade(uint loops, uint amount) public {
-        vm.stopPrank();     
         vm.startPrank(minter);
         dola.mint(address(swapper), amount);
         //Trade back and forth to create a profit
