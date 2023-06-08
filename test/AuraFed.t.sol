@@ -270,7 +270,7 @@ contract AuraFedTest is Test{
     }
 
     function testSetMigrator_Fails_WhenCalledByNonGov(address caller) public {
-        vm.assume(caller != migrator);
+        vm.assume(caller != gov);
         vm.prank(chair);
         fed.expansion(1000 ether);
         vm.prank(caller);
