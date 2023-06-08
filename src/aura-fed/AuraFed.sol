@@ -4,226 +4,158 @@ import "src/interfaces/IERC20.sol";
 import "src/interfaces/balancer/IVault.sol";
 import "src/interfaces/aura/IAuraLocker.sol";
 import "src/interfaces/aura/IAuraBalRewardPool.sol";
-import "src/aura-fed/BalancerAdapter.sol";
+import "src/aura-fed/BalancerStablepoolAdapter.sol";
+import "src/MintingFed.sol";
+import "src/LossyFed.sol";
 
 interface IAuraBooster {
-    function depositAll(uint _pid, bool _stake) external;
-    function withdraw(uint _pid, uint _amount) external;
+    function depositAll(uint _guagePid, bool _stake) external;
+    function withdraw(uint _guagePid, uint _amount) external;
 }
 
-contract AuraFed is BalancerComposableStablepoolAdapter{
+contract AuraFed is BalancerStablepoolAdapter, LossyFed {
 
     IAuraBalRewardPool public dolaBptRewardPool;
     IAuraBooster public booster;
-    IERC20 public bal;
-    IERC20 public aura;
-    address public chair; // Fed Chair
-    address public guardian;
-    address public gov;
-    uint public dolaSupply;
-    uint public constant pid = 8; //Gauge pid, should never change
-    uint public maxLossExpansionBps;
-    uint public maxLossWithdrawBps;
-    uint public maxLossTakeProfitBps;
-    uint public maxLossSetableByGuardian = 500;
-
-    event Expansion(uint amount);
-    event Contraction(uint amount);
+    IERC20 public constant BAL = IERC20(0xba100000625a3754423978a60c9317c58a424e3D);
+    IERC20 public constant AURA = IERC20(0xC0c293ce456fF0ED870ADd98a0828Dd4d2903DBF);
+    uint public constant guagePid = 45;
 
     constructor(
             address dola_, 
-            address aura_,
-            address vault_,
             address dolaBptRewardPool_, 
+            address bpt_,
             address booster_,
             address chair_,
             address guardian_,
             address gov_, 
             uint maxLossExpansionBps_,
-            uint maxLossWithdrawBps_,
-            uint maxLossTakeProfitBps_,
-            bytes32 poolId_) 
-            BalancerComposableStablepoolAdapter(poolId_, dola_, vault_)
+            uint maxLossContractionBps_,
+            uint maxLossTakeProfitBps_)
+            LossyFed(dola_, gov_, chair_, guardian_, maxLossExpansionBps_, maxLossContractionBps_, maxLossTakeProfitBps_)
     {
-        require(maxLossExpansionBps_ < 10000, "Expansion max loss too high");
-        require(maxLossWithdrawBps_ < 10000, "Withdraw max loss too high");
-        require(maxLossTakeProfitBps_ < 10000, "TakeProfit max loss too high");
+        init(bpt_);
         dolaBptRewardPool = IAuraBalRewardPool(dolaBptRewardPool_);
         booster = IAuraBooster(booster_);
-        aura = IERC20(aura_);
-        bal = IERC20(dolaBptRewardPool.rewardToken());
-        (address bpt,) = IVault(vault_).getPool(poolId_);
-        IERC20(bpt).approve(booster_, type(uint256).max);
-        maxLossExpansionBps = maxLossExpansionBps_;
-        maxLossWithdrawBps = maxLossWithdrawBps_;
-        maxLossTakeProfitBps = maxLossTakeProfitBps_;
-        chair = chair_;
-        gov = gov_;
-        guardian = guardian_;
+        BPT.approve(booster_, type(uint256).max);
     }
 
     /**
-    @notice Method for gov to change gov address
-    */
-    function changeGov(address newGov_) public {
-        require(msg.sender == gov, "ONLY GOV");
-
-        gov = newGov_;
-    }
-
-    /**
-    @notice Method for gov to change the chair
-    */
-    function changeChair(address newChair_) public {
-        require(msg.sender == gov, "ONLY GOV");
-        chair = newChair_;
-    }
-
-    /**
-    @notice Method for current chair of the Aura FED to resign
-    */
-    function resign() public {
+     * @notice Deposits amount of dola tokens into balancer, before locking with aura
+     * @param dolaAmount Amount of dola token to deposit
+     * @return claimsReceived Returns the amount of balancer pool tokens received
+     */
+    function _deposit(uint dolaAmount) internal override returns(uint claimsReceived) {
         require(msg.sender == chair, "ONLY CHAIR");
-        chair = address(0);
-    }
-
-    function setMaxLossExpansionBps(uint newMaxLossExpansionBps) public {
-        require(msg.sender == gov, "ONLY GOV");
-        require(newMaxLossExpansionBps <= 10000, "Can't have max loss above 100%");
-        maxLossExpansionBps = newMaxLossExpansionBps;
-    }
-
-    function setMaxLossWithdrawBps(uint newMaxLossWithdrawBps) public {
-        require(msg.sender == gov || msg.sender == guardian, "ONLY GOV OR CHAIR");
-        if(msg.sender == guardian){
-            //We limit the max loss a guardian, as we only want governance to be able to set a very high maxloss 
-            require(newMaxLossWithdrawBps <= maxLossSetableByGuardian, "Above allowed maxloss for chair");
-        }
-        require(newMaxLossWithdrawBps <= 10000, "Can't have max loss above 100%");
-        maxLossWithdrawBps = newMaxLossWithdrawBps;
-    }
-
-    function setMaxLossTakeProfitBps(uint newMaxLossTakeProfitBps) public {
-        require(msg.sender == gov, "ONLY GOV");
-        require(newMaxLossTakeProfitBps <= 10000, "Can't have max loss above 100%");
-        maxLossTakeProfitBps = newMaxLossTakeProfitBps;   
-    }
-
-    function setMaxLossSetableByGuardian(uint newMaxLossSetableByGuardian) public {
-        require(msg.sender == gov, "ONLY GOV");
-        require(newMaxLossSetableByGuardian < 10000);
-        maxLossSetableByGuardian = newMaxLossSetableByGuardian;
+        claimsReceived = _addLiquidity(dolaAmount, maxLossExpansionBps);
+        booster.depositAll(guagePid, true);
     }
     /**
-    @notice Deposits amount of dola tokens into balancer, before locking with aura
-    @param amount Amount of dola token to deposit
-    */
-    function expansion(uint amount) public {
-        require(msg.sender == chair, "ONLY CHAIR");
-        dolaSupply += amount;
-        IERC20(dola).mint(address(this), amount);
-        _deposit(amount, maxLossExpansionBps);
-        booster.depositAll(pid, true);
-        emit Expansion(amount);
-    }
-    /**
-    @notice Withdraws an amount of dola token to be burnt, contracting DOLA dolaSupply
-    @dev Be careful when setting maxLoss parameter. There will almost always be some loss from
-    slippage + trading fees that may be incurred when withdrawing from a Balancer pool.
-    On the other hand, setting the maxLoss too high, may cause you to be front run by MEV
-    sandwhich bots, making sure your entire maxLoss is incurred.
-    Recommended to always broadcast withdrawl transactions(contraction & takeProfits)
-    through a frontrun protected RPC like Flashbots RPC.
-    @param amountDola The amount of dola tokens to withdraw. Note that more tokens may
-    be withdrawn than requested, as price is calculated by debts to strategies, but strategies
-    may have outperformed price of dola token.
-    */
-    function contraction(uint amountDola) public {
+     * @notice Withdraws an amount of dola token to be burnt, contracting DOLA debt
+     * @dev Be careful when setting maxLoss parameter. There will almost always be some loss from
+     *  slippage + trading fees that may be incurred when withdrawing from a Balancer pool.
+     *  On the other hand, setting the maxLoss too high, may cause you to be front run by MEV
+     *  sandwhich bots, making sure your entire maxLoss is incurred.
+     *  Recommended to always broadcast withdrawl transactions(contraction & takeProfits)
+     *  through a frontrun protected RPC like Flashbots RPC.
+     * @param amountDola The amount of dola tokens to withdraw. Note that more tokens may
+     *  be withdrawn than requested, as price is calculated by debts to strategies, but strategies
+     *  may have outperformed price of dola token.
+     * @return claimsUsed The amoutn of balancer pools tokens spent on withdrawing.
+     * @return dolaReceived The DOLA received from the withdrawal
+     */
+    function _withdraw(uint amountDola) internal override returns(uint claimsUsed, uint dolaReceived){
         require(msg.sender == chair, "ONLY CHAIR");
         //Calculate how many lp tokens are needed to withdraw the dola
+        uint claimsBefore = claimsSupply();
         uint bptNeeded = bptNeededForDola(amountDola);
-        require(bptNeeded <= bptSupply(), "Not enough BPT tokens");
+        require(bptNeeded <= claimsSupply(), "Not enough BPT tokens");
 
         //Withdraw BPT tokens from aura, but don't claim rewards
         require(dolaBptRewardPool.withdrawAndUnwrap(bptNeeded, false), "AURA WITHDRAW FAILED");
 
-
         //Withdraw DOLA from balancer pool
-        uint dolaWithdrawn = _withdraw(amountDola, maxLossWithdrawBps);
+        uint dolaWithdrawn = _removeLiquidity(amountDola, maxLossContractionBps);
         require(dolaWithdrawn > 0, "Must contract");
-        _burnAndPay();
-        emit Contraction(dolaWithdrawn);
+        return(claimsBefore - claimsSupply(), dolaWithdrawn);
     }
 
     /**
-    @notice Withdraws every remaining balLP token. Can take up to maxLossWithdrawBps in loss, compared to dolaSupply.
-    It will still be necessary to call takeProfit to withdraw any potential rewards.
-    */
-    function contractAll() public {
-        require(msg.sender == chair, "ONLY CHAIR");
-        //dolaBptRewardPool.withdrawAllAndUnwrap(false);
-        require(dolaBptRewardPool.withdrawAndUnwrap(dolaBptRewardPool.balanceOf(address(this)), false), "AURA WITHDRAW FAILED");
-        uint dolaWithdrawn = _withdrawAll(maxLossWithdrawBps);
-        require(dolaWithdrawn > 0, "Must contract");
-        _burnAndPay();
-        emit Contraction(dolaWithdrawn);
+     * @notice Withdraws every remaining balLP token. Can take up to maxLossContractionBps in loss, compared to debt.
+     * @dev It will be necessary to call takeProfit to withdraw any rewards.
+     * @return claimsUsed The amoutn of balancer pools tokens spent on withdrawing.
+     * @return dolaReceived The DOLA received from the withdrawal
+     */
+    function _withdrawAll() internal override returns(uint claimsUsed, uint dolaReceived){
+        uint totalClaims = claimsSupply();
+        uint claimsToUnstake = dolaBptRewardPool.balanceOf(address(this));
+        require(dolaBptRewardPool.withdrawAndUnwrap(claimsToUnstake, false), "AURA WITHDRAW FAILED");
+        uint dolaWithdrawn = _removeAllLiquidity(maxLossContractionBps);
+        require(dolaWithdrawn > 0, "MUST CONTRACT");
+        return(totalClaims - claimsSupply(), dolaWithdrawn);
     }
 
     /**
-    @notice Burns all dola tokens held by the fed up to the dolaSupply, taking any surplus as profit.
-    */
-    function _burnAndPay() internal {
-        uint dolaBal = dola.balanceOf(address(this));
-        if(dolaBal > dolaSupply){
-            IERC20(dola).transfer(gov, dolaBal - dolaSupply);
-            IERC20(dola).burn(dolaSupply);
-            dolaSupply = 0;
-        } else {
-            IERC20(dola).burn(dolaBal);
-            dolaSupply -= dolaBal;
-        }
-    }
-
-    /**
-    @notice Withdraws the profit generated by aura staking
-    @dev See dev note on Contraction method
-    */
-    function takeProfit(bool harvestLP) public {
+     * @notice Withdraws the profit generated by aura staking
+     * @param flag Flags special behaviour that may only be allowed by special roles.
+     *  Flag = 1: Takes profit on BPTs
+     */
+    function takeProfit(uint flag) override external {
         //This takes balLP at face value, but doesn't take into account slippage or fees
         //Worth considering that the additional transaction fees incurred by withdrawing the small amount of profit generated by tx fees,
         //may not eclipse additional transaction costs. Set harvestLP = false to only withdraw bal and aura rewards.
-        uint bptValue = bptSupply() * bpt.getRate() / 10**18;
-        if(harvestLP && bptValue > dolaSupply) {
+        uint bptValue = claimsSupply() * BPT.getRate() / 10**18;
+        if(flag == 1 && bptValue > debt) {
             require(msg.sender == chair, "ONLY CHAIR CAN TAKE BPT PROFIT");
-            uint dolaSurplus = bptValue - dolaSupply;
+            uint dolaSurplus = bptValue - debt;
             uint bptToWithdraw = bptNeededForDola(dolaSurplus);
             if(bptToWithdraw > dolaBptRewardPool.balanceOf(address(this))){
                 bptToWithdraw = dolaBptRewardPool.balanceOf(address(this));
             }
             require(dolaBptRewardPool.withdrawAndUnwrap(bptToWithdraw, false), "AURA WITHDRAW FAILED");
-            uint dolaProfit = _withdraw(dolaSurplus, maxLossTakeProfitBps);
+            uint dolaProfit = _removeLiquidity(dolaSurplus, maxLossTakeProfitBps);
             require(dolaProfit > 0, "NO PROFIT");
-            dola.transfer(gov, dolaProfit);
+            DOLA.transfer(gov, dolaProfit);
         }
 
         require(dolaBptRewardPool.getReward(address(this), true), "Getting reward failed");
-        bal.transfer(gov, bal.balanceOf(address(this)));
-        aura.transfer(gov, aura.balanceOf(address(this)));
+        uint balBalance = BAL.balanceOf(address(this));
+        uint auraBalance = AURA.balanceOf(address(this));
+        if(balBalance > 0) BAL.transfer(gov, balBalance);
+        if(auraBalance > 0) AURA.transfer(gov, auraBalance);
     }
 
     /**
-    @notice Burns the remaining dola supply in case the FED has been completely contracted, and still has a negative dola balance.
-    */
-    function burnRemainingDolaSupply() public {
-        dola.transferFrom(msg.sender, address(this), dolaSupply);
-        dola.burn(dolaSupply);
-        dolaSupply = 0;
+     * @notice Withdraws balancer pool tokens to governance in an emergency.
+     * @dev Will ruin accounting of the contract
+     */
+    function emergencyWithdraw() onlyGov override external {
+        require(dolaBptRewardPool.withdrawAndUnwrap(dolaBptRewardPool.balanceOf(address(this)), false), "AURA WITHDRAW FAILED");
+        BPT.transfer(gov, BPT.balanceOf(address(this)));
+    }
+
+    /**
+     * @notice Migrates claims tokens and debt to the Migrator fed contract
+     * @dev The calling migrator must increment its debt by amount returned by this call
+     * @param claimsToMigrate Amount of claims tokens to migrate
+     * @return Amount of debt to migrate
+     */
+    function migrateTo(uint claimsToMigrate) onlyMigrator override external returns(uint){
+        uint totalClaims = claimsSupply();
+        require(totalClaims >= claimsToMigrate, "NOT ENOUGH CLAIMS");
+        uint claimsToUnstake =  claimsToMigrate - BPT.balanceOf(address(this));
+        require(dolaBptRewardPool.withdrawAndUnwrap(claimsToUnstake, false), "AURA WITHDRAW FAILED");
+        uint debtToMigrate = debt * claimsToMigrate / totalClaims;
+        debt -= debtToMigrate;
+        claims -= claimsToMigrate;
+        BPT.transfer(migrator, claimsToMigrate);
+        return debtToMigrate;
     }
     
     /**
     @notice View function for getting bpt tokens in the contract + aura dolaBptRewardPool
     */
-    function bptSupply() public view returns(uint){
-        return IERC20(bpt).balanceOf(address(this)) + dolaBptRewardPool.balanceOf(address(this));
+    function claimsSupply() public view override returns(uint){
+        return BPT.balanceOf(address(this)) + dolaBptRewardPool.balanceOf(address(this));
     }
 }

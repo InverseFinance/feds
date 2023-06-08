@@ -11,18 +11,18 @@ interface IBPT is IERC20{
 contract BalancerComposableStablepoolAdapter {
     
     uint constant BPS = 10_000;
-    bytes32 immutable poolId;
-    IERC20 immutable dola;
-    IBPT immutable bpt = IBPT(0x5b3240B6BE3E7487d61cd1AFdFC7Fe4Fa1D81e64);
-    IVault immutable vault;
+    bytes32 public poolId;
+    IERC20 constant _DOLA = IERC20(0x865377367054516e17014CcdED1e7d814EDC9ce4);
+    IBPT public BPT;
+    IVault constant VAULT = IVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
     IVault.FundManagement fundMan;
     
-    constructor(bytes32 poolId_, address dola_, address vault_){
-        poolId = poolId_;
-        dola = IERC20(dola_);
-        vault = IVault(vault_);
-        dola.approve(vault_, type(uint).max);
-        bpt.approve(vault_, type(uint).max);
+    //Use internal init instead of constructor due to stack too deep
+    function init(address _bpt) internal{
+        BPT = IBPT(_bpt);
+        poolId = BPT.getPoolId();
+        _DOLA.approve(address(VAULT), type(uint).max);
+        BPT.approve(address(VAULT), type(uint).max);
         fundMan.sender = address(this);
         fundMan.fromInternalBalance = false;
         fundMan.recipient = payable(address(this));
@@ -31,7 +31,7 @@ contract BalancerComposableStablepoolAdapter {
     
     /**
     @notice Swaps exact amount of assetIn for asseetOut through a balancer pool. Output must be higher than minOut
-    @dev Due to the unique design of Balancer ComposableStablePools, where BPT are part of the swappable balance, we can just swap DOLA directly for BPT
+    @dev Due to the unique design of Balancer ComposableStablePools, where BPT are part of the swappable balance, we can just swap _DOLA directly for BPT
     @param assetIn Address of the asset to trade an exact amount in
     @param assetOut Address of the asset to trade for
     @param amount Amount of assetIn to trade
@@ -48,58 +48,58 @@ contract BalancerComposableStablepoolAdapter {
         swapStruct.amount = amount;
         //swapStruct.userData: User data can be left empty
 
-        vault.swap(swapStruct, fundMan, minOut, block.timestamp+1);
+        VAULT.swap(swapStruct, fundMan, minOut, block.timestamp+1);
     }
 
     /**
-    @notice Deposit an amount of dola into balancer, getting balancer pool tokens in return
-    @param dolaAmount Amount of dola to buy BPTs for
-    @param maxSlippage Maximum amount of value that can be lost in basis points, assuming DOLA = 1$
+    @notice Deposit an amount of _DOLA into balancer, getting balancer pool tokens in return
+    @param dolaAmount Amount of _DOLA to buy BPTs for
+    @param maxSlippage Maximum amount of value that can be lost in basis points, assuming _DOLA = 1$
     */
-    function _deposit(uint dolaAmount, uint maxSlippage) internal returns(uint){
-        uint init = bpt.balanceOf(address(this));
-        uint bptWanted = bptNeededForDola(dolaAmount);
-        uint minBptOut = bptWanted - bptWanted * maxSlippage / BPS;
-        swapExactIn(address(dola), address(bpt), dolaAmount, minBptOut);
-        uint bptOut =  bpt.balanceOf(address(this)) - init;
-        return bptOut;
+    function _addLiquidity(uint dolaAmount, uint maxSlippage) internal returns(uint){
+        uint initialBal = BPT.balanceOf(address(this));
+        uint BPTWanted = bptNeededForDola(dolaAmount);
+        uint minBptOut = BPTWanted - BPTWanted * maxSlippage / BPS;
+        swapExactIn(address(_DOLA), address(BPT), dolaAmount, minBptOut);
+        uint BPTOut =  BPT.balanceOf(address(this)) - initialBal;
+        return BPTOut;
     }
     
     /**
     @notice Withdraws an amount of value close to dolaAmount
     @dev Will rarely withdraw an amount equal to dolaAmount, due to slippage.
-    @param dolaAmount Amount of dola the withdrawer wants to withdraw
-    @param maxSlippage Maximum amount of value that can be lost in basis points, assuming DOLA = 1$
+    @param dolaAmount Amount of _DOLA the withdrawer wants to withdraw
+    @param maxSlippage Maximum amount of value that can be lost in basis points, assuming _DOLA = 1$
     */
-    function _withdraw(uint dolaAmount, uint maxSlippage) internal returns(uint){
-        uint init = dola.balanceOf(address(this));
-        uint bptNeeded = bptNeededForDola(dolaAmount);
+    function _removeLiquidity(uint dolaAmount, uint maxSlippage) internal returns(uint){
+        uint initialBal = _DOLA.balanceOf(address(this));
+        uint BPTNeeded = bptNeededForDola(dolaAmount);
         uint minDolaOut = dolaAmount - dolaAmount * maxSlippage / BPS;
-        swapExactIn(address(bpt), address(dola), bptNeeded, minDolaOut);
-        uint dolaOut = dola.balanceOf(address(this)) - init;
+        swapExactIn(address(BPT), address(_DOLA), BPTNeeded, minDolaOut);
+        uint dolaOut = _DOLA.balanceOf(address(this)) - initialBal;
         return dolaOut;
     }
 
     /**
     @notice Withdraws all BPT in the contract
     @dev Will rarely withdraw an amount equal to dolaAmount, due to slippage.
-    @param maxSlippage Maximum amount of value that can be lost in basis points, assuming DOLA = 1$
+    @param maxSlippage Maximum amount of value that can be lost in basis points, assuming _DOLA = 1$
     */
-    function _withdrawAll(uint maxSlippage) internal returns(uint){
-        uint bptBal = bpt.balanceOf(address(this));
-        uint expectedDolaOut = bptBal * bpt.getRate() / 10**18;
+    function _removeAllLiquidity(uint maxSlippage) internal returns(uint){
+        uint BPTBal = BPT.balanceOf(address(this));
+        uint expectedDolaOut = BPTBal * BPT.getRate() / 10**18;
         uint minDolaOut = expectedDolaOut - expectedDolaOut * maxSlippage / BPS;
-        swapExactIn(address(bpt), address(dola), bptBal, minDolaOut);
-        return dola.balanceOf(address(this));
+        swapExactIn(address(BPT), address(_DOLA), BPTBal, minDolaOut);
+        return _DOLA.balanceOf(address(this));
     }
 
     /**
     @notice Get amount of BPT equal to the value of dolaAmount, assuming Dola = 1$
     @dev Uses the getRate() function of the balancer pool to calculate the value of the dolaAmount
-    @param dolaAmount Amount of DOLA to get the equal value in BPT.
+    @param dolaAmount Amount of _DOLA to get the equal value in BPT.
     @return Uint representing the amount of BPT the dolaAmount should be worth.
     */
     function bptNeededForDola(uint dolaAmount) public view returns(uint) {
-        return dolaAmount * 10**18 / bpt.getRate();
+        return dolaAmount * 10**18 / BPT.getRate();
     }
 }
