@@ -269,6 +269,16 @@ contract AuraFedTest is Test{
         assertEq(fed.debt(), initialDebt - debtToMigrate, "Fed debt not decreased correctly");
     }
 
+    function testSetMigrator_Fails_WhenCalledByNonGov(address caller) public {
+        vm.assume(caller != migrator);
+        vm.prank(chair);
+        fed.expansion(1000 ether);
+        vm.prank(caller);
+        vm.expectRevert("NOT GOV");
+        fed.setMigrator(migrator);
+        
+    }
+
     function testEmergencyWithdraw_Success_WhenCalledByGov() public {
         vm.prank(chair);
         fed.expansion(1000 ether);
@@ -278,6 +288,14 @@ contract AuraFedTest is Test{
 
         assertEq(bpt.balanceOf(gov), initialClaimsSupply);
         assertEq(fed.claimsSupply(), 0);
+    }
+
+    function testEmergencyWithdraw_Fails_WhenCalledByNonGov(address caller) public {
+        vm.prank(chair);
+        fed.expansion(1000 ether);
+        vm.prank(caller);
+        vm.expectRevert("NOT GOV");
+        fed.emergencyWithdraw();
     }
 
     function testContraction_FailWithOnlyChair_whenCalledByOtherAddress() public {
