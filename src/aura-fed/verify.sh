@@ -1,0 +1,12 @@
+dola=0x865377367054516e17014CcdED1e7d814EDC9ce4;
+aura=0xC0c293ce456fF0ED870ADd98a0828Dd4d2903DBF;
+vault=0xBA12222222228d8Ba445958a75a0704d566BF2C8;
+booster=0xA57b8d98dAE62B26Ec3bcC4a365338157060B234;
+chair=0x8F97cCA30Dbe80e7a8B462F1dD1a51C32accDfC8;
+guardian=0xE3eD95e130ad9E15643f5A5f232a3daE980784cd;
+gov=0x926dF14a23BE491164dCF93f4c468A50ef659D5B;
+maxLossExpansion=13;
+maxLossWithdraw=10;
+maxLossTakeProfit=10;
+poolId=0xff4ce5aaab5a627bf82f4a571ab1ce94aa365ea6000200000000000000000426;
+forge verify-contract --watch  --constructor-args $(cast abi-encode "constructor(address,address,address,address,address,address,address,uint,uint,uint,bytes32)" $dola $aura $vault $booster $chair $guardian $gov $maxLossExpansion $maxLossWithdraw $maxLossTakeProfit $poolId) 0x5c16ae212f8d721fab74164d1039d4514b11db54 src/aura-fed/AuraStablepoolFed.sol:AuraStablepoolFed --etherscan-api-key 4NV5EG8FTGYT4M9F642IPHE7Z8GBHGS97V
