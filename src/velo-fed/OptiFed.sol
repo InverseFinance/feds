@@ -2,9 +2,9 @@
 pragma solidity ^0.8.13;
 
 import "../interfaces/IERC20.sol";
-import "../interfaces/velo/IDola.sol";
-import "../interfaces/velo/IL1ERC20Bridge.sol";
-import "../interfaces/velo/ICurvePool.sol";
+import "../interfaces/IDola.sol";
+import "../interfaces/opti/IL1ERC20Bridge.sol";
+import "../interfaces/curve/ICurvePool.sol";
 
 contract OptiFed {
     address public chair;

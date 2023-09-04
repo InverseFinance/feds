@@ -1,8 +1,7 @@
 pragma solidity ^0.8.13;
 
 import "src/interfaces/IERC20.sol";
-import "src/interfaces/velo/IDola.sol";
-import "src/interfaces/velo/IL1ERC20Bridge.sol";
+import "src/interfaces/IDola.sol";
 import "src/arbi-fed/ArbiGasManager.sol";
 import {IL1GatewayRouter} from "arbitrum/tokenbridge/ethereum/gateway/IL1GatewayRouter.sol";
 
