@@ -2,11 +2,11 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
-import { IERC20 } from "../interfaces/IERC20.sol";
-import { IDola } from "../interfaces/velo/IDola.sol";
-import "../interfaces/velo/IL2CrossDomainMessenger.sol";
-import { VeloFarmer, IRouter, IGauge} from "../velo-fed/VeloFarmer.sol";
-import {OptiFed} from "../velo-fed/OptiFed.sol";
+import { IERC20 } from "src/interfaces/IERC20.sol";
+import { IDola } from "src/interfaces/IDola.sol";
+import "src/interfaces/opti/IL2CrossDomainMessenger.sol";
+import { VeloFarmer, IRouter, IGauge} from "src/velo-fed/VeloFarmer.sol";
+import {OptiFed} from "src/velo-fed/OptiFed.sol";
 
 contract VeloFarmerMainnetTest is Test {
     IRouter public router = IRouter(payable(0xa132DAB612dB5cB9fC9Ac426A0Cc215A3423F9c9));

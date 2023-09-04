@@ -5,7 +5,7 @@ import "ds-test/test.sol";
 import "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 import {IERC20} from "src/interfaces/IERC20.sol";
-import {IDola} from "src/interfaces/velo/IDola.sol";
+import {IDola} from "src/interfaces/IDola.sol";
 import "src/arbi-fed/ArbiGovMessengerL1.sol";
 import {AuraFarmer} from "src/arbi-fed/AuraFarmer.sol";
 import {IInbox} from "arbitrum-nitro/contracts/src/bridge/IInbox.sol";
