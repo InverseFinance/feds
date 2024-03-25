@@ -6,6 +6,32 @@ import "../interfaces/velo/IDola.sol";
 import "../interfaces/velo/IL1ERC20Bridge.sol";
 import "../interfaces/velo/ICurvePool.sol";
 
+interface ICCTP {
+      /**
+     * @notice Deposits and burns tokens from sender to be minted on destination domain.
+     * Emits a `DepositForBurn` event.
+     * @dev reverts if:
+     * - given burnToken is not supported
+     * - given destinationDomain has no TokenMessenger registered
+     * - transferFrom() reverts. For example, if sender's burnToken balance or approved allowance
+     * to this contract is less than `amount`.
+     * - burn() reverts. For example, if `amount` is 0.
+     * - MessageTransmitter returns false or reverts.
+     * @param amount amount of tokens to burn
+     * @param destinationDomain destination domain
+     * @param mintRecipient address of mint recipient on destination domain
+     * @param burnToken address of contract to burn deposited tokens, on local domain
+     * @return _nonce unique nonce reserved by message
+     */
+    function depositForBurn(
+        uint256 amount,
+        uint32 destinationDomain,
+        bytes32 mintRecipient,
+        address burnToken
+    ) external returns (uint64 _nonce);
+}
+
+
 contract OptiFed {
     address public chair;
     address public gov;
@@ -23,6 +49,7 @@ contract OptiFed {
     address public constant DOLA_OPTI = 0x8aE125E8653821E851F12A49F7765db9a9ce7384;
     address public constant USDC_OPTI = 0x7F5c764cBc14f9669B88837ca1490cCa17c31607;
     ICurvePool public curvePool = ICurvePool(0xE57180685E3348589E9521aa53Af0BCD497E884d);
+    ICCTP public constant cctp = ICCTP(0xBd3fa81B58Ba92a82136038B25aDec7066af3155);
     address public veloFarmer;
 
     event Expansion(uint amount);
@@ -67,10 +94,11 @@ contract OptiFed {
 
         uint dolaToBridge = dolaAmount - dolaToSwap;
         DOLA.approve(address(optiBridge), dolaToBridge);
-        USDC.approve(address(optiBridge), usdcAmount);
-        optiBridge.depositERC20To(address(DOLA), DOLA_OPTI, veloFarmer, dolaToBridge, 200_000, "");
-        optiBridge.depositERC20To(address(USDC), USDC_OPTI, veloFarmer, usdcAmount, 200_000, "");
+        USDC.approve(address(cctp), usdcAmount);
 
+        optiBridge.depositERC20To(address(DOLA), DOLA_OPTI, veloFarmer, dolaToBridge, 200_000, "");
+        cctp.depositForBurn(usdcAmount, 2, bytes32(uint256(uint160(veloFarmer))), address(USDC));
+      
         emit Expansion(dolaAmount);
     }
 

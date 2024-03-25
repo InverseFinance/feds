@@ -39,7 +39,8 @@ contract OptiFedMainnetTest is Test {
     error DeltaAboveMax();
     
     function setUp() public {
-        vm.warp(block.timestamp + 1 days);
+        vm.createSelectFork(vm.rpcUrl("mainnet"), 19512248);
+        //vm.warp(block.timestamp + 1 days);
         
         vm.startPrank(chair);
 
@@ -74,8 +75,10 @@ contract OptiFedMainnetTest is Test {
         uint estimatedUsdcAmount = dolaAmount / 2 / 1e12;
 
         assertEq(prevDolaBal + dolaAmount / 2, DOLA.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of DOLA");
-        assertGt(prevUsdcBal + estimatedUsdcAmount * 1001 / 1000, USDC.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of USDC");
-        assertLt(prevUsdcBal + estimatedUsdcAmount, USDC.balanceOf(l1optiBridgeAddress) * 1001/1000, "Bridge didn't receive correct amount of USDC");
+        assertEq(USDC.balanceOf(address(fed)),0, "CCTP Burn Failed");
+
+        // assertGt(prevUsdcBal + estimatedUsdcAmount * 1001 / 1000, USDC.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of USDC");
+        // assertLt(prevUsdcBal + estimatedUsdcAmount, USDC.balanceOf(l1optiBridgeAddress) * 1001/1000, "Bridge didn't receive correct amount of USDC");
     }
 
     function testL1_OptiFedExpansionAndSwap(uint8 multi) public {
@@ -93,8 +96,10 @@ contract OptiFedMainnetTest is Test {
         uint estimatedUsdcAmount = dolaToSwap / 1e12;
 
         assertEq(prevDolaBal + dolaToBridge, DOLA.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of DOLA");
-        assertGt(prevUsdcBal + estimatedUsdcAmount * 1001 / 1000, USDC.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of USDC");
-        assertLt(prevUsdcBal + estimatedUsdcAmount, USDC.balanceOf(l1optiBridgeAddress) * 1001/1000, "Bridge didn't receive correct amount of USDC");
+        assertEq(USDC.balanceOf(address(fed)),0, "CCTP Burn Failed");
+
+        // assertGt(prevUsdcBal + estimatedUsdcAmount * 1001 / 1000, USDC.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of USDC");
+        // assertLt(prevUsdcBal + estimatedUsdcAmount, USDC.balanceOf(l1optiBridgeAddress) * 1001/1000, "Bridge didn't receive correct amount of USDC");
     }
 
     function testL1_OptiFedExpansionAndSwap_Fails_IfSlippageRestraintUnmet() public {
