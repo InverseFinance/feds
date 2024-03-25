@@ -7,11 +7,12 @@ import { IDola } from "../interfaces/velo/IDola.sol";
 import "../interfaces/velo/IL2CrossDomainMessenger.sol";
 import { VeloFarmerV3, IRouter, IGauge} from "../velo-fed/VeloFarmerV3.sol";
 import {OptiFed} from "../velo-fed/OptiFed.sol";
+import {console} from "forge-std/console.sol";
 
 contract VeloFarmerV3Test is Test {
     IRouter public router = IRouter(payable(0xa062aE8A9c5e11aaA026fc2670B0D65cCc8B2858));
-    //IGauge public dolaGauge = IGauge(0xAFD2c84b9d1cd50E7E18a55e419749A6c9055E1F);
     IGauge public dolaGauge = IGauge(0xa1034Ed2C9eb616d6F7f318614316e64682e7923);
+    IGauge public dolaGaugeNative = IGauge(0x853CAcEc83e4183eF78d6b64ccca3de365861CaF);
     IDola public DOLA = IDola(0x8aE125E8653821E851F12A49F7765db9a9ce7384);
     IERC20 public VELO = IERC20(0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db);
     IERC20 public USDC = IERC20(0x7F5c764cBc14f9669B88837ca1490cCa17c31607);
@@ -27,6 +28,8 @@ contract VeloFarmerV3Test is Test {
     address public cctpMainnet = 0xBd3fa81B58Ba92a82136038B25aDec7066af3155;
     address public cctpOpti = 0x2B4069517957735bE00ceE0fadAE88a26365528f;
     address public usdcNativeWhale = 0xacD03D601e5bB1B275Bb94076fF46ED9D753435A;
+   // address public veloVoterV2 = 0x41C914ee0c7E1A5edCD0295623e6dC557B5aBf3C;
+   // address public veloFactory = 0xF1046053aa5682b4F9a81b5481394DA16BE5FF5a;
     uint nonce;
 
     //EOAs
@@ -84,6 +87,13 @@ contract VeloFarmerV3Test is Test {
         VELO.approve(address(dolaGauge), 1000 ether);
         dolaGauge.notifyRewardAmount(1000 ether);
         vm.stopPrank();
+
+        voter = dolaGaugeNative.voter();
+        deal(address(VELO), address(voter), 1000 ether);
+        vm.startPrank(voter);
+        VELO.approve(address(dolaGaugeNative), 1000 ether);
+        dolaGaugeNative.notifyRewardAmount(1000 ether);
+        vm.stopPrank();
     }
 
     // NATIVE USDC
@@ -110,7 +120,7 @@ contract VeloFarmerV3Test is Test {
         gibDOLA(address(fed), dolaAmount * 3);
         gibUSDCNative(address(fed), usdcAmount * 3);
 
-      //  uint initialVelo = VELO.balanceOf(address(treasury));
+        uint initialVelo = VELO.balanceOf(address(treasury));
 
         vm.startPrank(address(l2CrossDomainMessenger));
         mockXDomainMessageSender(gov);
@@ -120,14 +130,19 @@ contract VeloFarmerV3Test is Test {
         vm.startPrank(l2chair);
         fed.depositNative(dolaAmount / 2, usdcAmount / 2);
 
-        assertGt(fed.LP_TOKEN_NATIVE().balanceOf(address(fed)),0);
+        vm.roll(block.number + 100000);
+        vm.warp(block.timestamp + (10_0000 * 60));
+        fed.claimVeloRewardsNative();
+
+        assertEq(fed.LP_TOKEN_NATIVE().balanceOf(address(fed)),0);
+        assertGt(VELO.balanceOf(address(treasury)), initialVelo, "No rewards claimed");
     }
 
     function testL2_depositAllNative() public {
         gibDOLA(address(fed), dolaAmount * 3);
         gibUSDCNative(address(fed), usdcAmount * 3);
 
-       // uint initialVelo = VELO.balanceOf(address(treasury));
+        uint initialVelo = VELO.balanceOf(address(treasury));
 
         vm.startPrank(address(l2CrossDomainMessenger));
         mockXDomainMessageSender(gov);
@@ -137,7 +152,12 @@ contract VeloFarmerV3Test is Test {
         vm.startPrank(l2chair);
         fed.depositAllNative();
 
-        assertGt(fed.LP_TOKEN_NATIVE().balanceOf(address(fed)),0);
+        vm.roll(block.number + 100000);
+        vm.warp(block.timestamp + (10_0000 * 60));
+        fed.claimVeloRewardsNative();
+
+        assertEq(fed.LP_TOKEN_NATIVE().balanceOf(address(fed)),0);
+        assertGt(VELO.balanceOf(address(treasury)), initialVelo, "No rewards claimed");
     }
 
     function testL2_withdrawNative() public {
@@ -441,7 +461,7 @@ contract VeloFarmerV3Test is Test {
         fed.setMaxSlippageUsdcToDola(500);
     }
 
-    function testL2_setMaxSlippageLiquidity_fail_whenCalledByNonGov() public {
+    function testL2_setMaxSlippageLiquidity_fail_whenCalledByNonGov() public {  
         vm.startPrank(user);
 
         vm.expectRevert(OnlyGovOrGuardian.selector);
