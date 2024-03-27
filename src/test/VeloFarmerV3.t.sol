@@ -79,16 +79,9 @@ contract VeloFarmerV3Test is Test {
         fed = new VeloFarmerV3(gov, chair, l2chair, treasury, guardian, l2optiBridgeAddress, optiFedAddress,cctpOpti, maxSlippageBpsDolaToUsdc, maxSlippageBpsUsdcToDola, maxSlippageBpsUsdcNativeToDola, maxSlippageLiquidity);
         vm.makePersistent(address(fed));
 
-        vm.label(address(fed.LP_TOKEN()),"LP_TOKEN");
-        vm.stopPrank();
-        address voter = dolaGauge.voter();
-        deal(address(VELO), address(voter), 1000 ether);
-        vm.startPrank(voter);
-        VELO.approve(address(dolaGauge), 1000 ether);
-        dolaGauge.notifyRewardAmount(1000 ether);
         vm.stopPrank();
 
-        voter = dolaGaugeNative.voter();
+        address voter = dolaGaugeNative.voter();
         deal(address(VELO), address(voter), 1000 ether);
         vm.startPrank(voter);
         VELO.approve(address(dolaGaugeNative), 1000 ether);
@@ -322,86 +315,49 @@ contract VeloFarmerV3Test is Test {
     //     fed.swapUSDCtoDOLA(usdcAmount*5);
     // }
 
-    function testL2_Withdraw() public {
-        vm.startPrank(l2optiBridgeAddress);
-        DOLA.mint(address(fed), dolaAmount);
-        USDC.mint(address(fed), dolaAmount / 1e12);
-        vm.stopPrank();
 
-        vm.startPrank(address(l2CrossDomainMessenger));
-        mockXDomainMessageSender(gov);
-        fed.setMaxSlippageLiquidity(1000);
-        vm.stopPrank();
+    // function testL2_Withdraw_FromL1Chair(uint amountDola) public {
+    //     amountDola = bound(amountDola, 10_000e18, 1_000_000_000e18);    
 
-        vm.startPrank(l2chair);
-        fed.depositAll();
-        fed.withdrawLiquidity(dolaAmount);
-        
-        fed.withdrawToL1OptiFed(DOLA.balanceOf(address(fed)), USDC.balanceOf(address(fed)));
-    }
+    //     vm.startPrank(l2optiBridgeAddress);
+    //     DOLA.mint(address(fed), amountDola);
+    //     USDC.mint(address(fed), amountDola / 1e12);
+    //     vm.stopPrank();
 
-    function testL2_Withdraw_FromL1Chair(uint amountDola) public {
-        amountDola = bound(amountDola, 10_000e18, 1_000_000_000e18);    
+    //     vm.startPrank(address(l2CrossDomainMessenger));
+    //     mockXDomainMessageSender(gov);
+    //     fed.setMaxSlippageLiquidity(4000);
+    //     vm.stopPrank();
 
-        vm.startPrank(l2optiBridgeAddress);
-        DOLA.mint(address(fed), amountDola);
-        USDC.mint(address(fed), amountDola / 1e12);
-        vm.stopPrank();
+    //     uint prevLiquidity = dolaGauge.balanceOf(address(fed));
 
-        vm.startPrank(address(l2CrossDomainMessenger));
-        mockXDomainMessageSender(gov);
-        fed.setMaxSlippageLiquidity(4000);
-        vm.stopPrank();
+    //     vm.startPrank(address(l2CrossDomainMessenger));
+    //     mockXDomainMessageSender(chair);
+    //     fed.depositAll();
+    //     vm.stopPrank();
 
-        uint prevLiquidity = dolaGauge.balanceOf(address(fed));
+    //     assertLt(prevLiquidity, dolaGauge.balanceOf(address(fed)), "depositAll failed");
+    //     prevLiquidity = dolaGauge.balanceOf(address(fed));
 
-        vm.startPrank(address(l2CrossDomainMessenger));
-        mockXDomainMessageSender(chair);
-        fed.depositAll();
-        vm.stopPrank();
+    //     vm.startPrank(address(l2CrossDomainMessenger));
+    //     mockXDomainMessageSender(chair);
+    //     fed.withdrawLiquidity(amountDola);
+    //     vm.stopPrank();
 
-        assertLt(prevLiquidity, dolaGauge.balanceOf(address(fed)), "depositAll failed");
-        prevLiquidity = dolaGauge.balanceOf(address(fed));
+    //     assertGt(prevLiquidity, dolaGauge.balanceOf(address(fed)), "withdrawLiquidity failed");
 
-        vm.startPrank(address(l2CrossDomainMessenger));
-        mockXDomainMessageSender(chair);
-        fed.withdrawLiquidity(amountDola);
-        vm.stopPrank();
+    //     uint prevDola = DOLA.balanceOf(address(fed));
+    //     uint prevUsdc = USDC.balanceOf(address(fed));
 
-        assertGt(prevLiquidity, dolaGauge.balanceOf(address(fed)), "withdrawLiquidity failed");
+    //     vm.startPrank(address(l2CrossDomainMessenger));
+    //     mockXDomainMessageSender(chair);
+    //     fed.withdrawToL1OptiFed(DOLA.balanceOf(address(fed)), USDC.balanceOf(address(fed)));
+    //     vm.stopPrank();
 
-        uint prevDola = DOLA.balanceOf(address(fed));
-        uint prevUsdc = USDC.balanceOf(address(fed));
+    //     assertGt(prevDola, DOLA.balanceOf(address(fed)), "Withdraw to L1 failed");
+    //     assertGt(prevUsdc, USDC.balanceOf(address(fed)), "Withdraw to L1 failed");
+    // }
 
-        vm.startPrank(address(l2CrossDomainMessenger));
-        mockXDomainMessageSender(chair);
-        fed.withdrawToL1OptiFed(DOLA.balanceOf(address(fed)), USDC.balanceOf(address(fed)));
-        vm.stopPrank();
-
-        assertGt(prevDola, DOLA.balanceOf(address(fed)), "Withdraw to L1 failed");
-        assertGt(prevUsdc, USDC.balanceOf(address(fed)), "Withdraw to L1 failed");
-    }
-
-    function testL2_WithdrawAndSwap() public {
-        vm.startPrank(l2optiBridgeAddress);
-        DOLA.mint(address(fed), dolaAmount);
-        gibUSDC(address(fed), usdcAmount);
-        vm.stopPrank();
-
-        vm.startPrank(address(l2CrossDomainMessenger));
-        mockXDomainMessageSender(gov);
-        fed.setMaxSlippageLiquidity(1000);
-        vm.stopPrank();
-
-        vm.startPrank(l2chair);
-        fed.depositAll();
-
-        uint dolaBal = DOLA.balanceOf(address(fed));
-        uint usdcBal = USDC.balanceOf(address(fed)) * fed.DOLA_USDC_CONVERSION_MULTI();
-        uint withdrawAmount = dolaAmount - dolaBal - usdcBal;
-
-        fed.withdrawLiquidityAndSwapToDOLA(withdrawAmount);
-    }
 
     function testL2_onlyChair_fail_whenCalledByBridge_NonChairSender() public {
 

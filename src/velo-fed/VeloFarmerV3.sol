@@ -299,9 +299,7 @@ contract VeloFarmerV3 {
     uint public constant DOLA_USDC_CONVERSION_MULTI= 1e12;
     uint public constant PRECISION = 10_000;
 
-    IGauge public constant dolaGauge = IGauge(0xa1034Ed2C9eb616d6F7f318614316e64682e7923); 
     IGauge public constant dolaGaugeNative = IGauge(0x853CAcEc83e4183eF78d6b64ccca3de365861CaF); 
-    IERC20 public constant LP_TOKEN = IERC20(0xB720FBC32d60BB6dcc955Be86b98D8fD3c4bA645);
     IERC20 public constant LP_TOKEN_NATIVE = IERC20(0xA56a25Dee5B3199A9198Bbd48715EE3D0ed98378);
     address public constant veloTokenAddr = 0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db;
     address public constant factory = 0xF1046053aa5682b4F9a81b5481394DA16BE5FF5a;
@@ -386,39 +384,12 @@ contract VeloFarmerV3 {
     /**
      * @notice Claims all VELO token rewards accrued by this contract & transfer all VELO owned by this contract to `treasury`
      */
-    function claimVeloRewards() external {
-        dolaGauge.getReward(address(this));
-
-        IERC20(veloTokenAddr).transfer(treasury, IERC20(veloTokenAddr).balanceOf(address(this)));
-    }
-
     function claimVeloRewardsNative() external {
         dolaGaugeNative.getReward(address(this));
 
         IERC20(veloTokenAddr).transfer(treasury, IERC20(veloTokenAddr).balanceOf(address(this)));
     }
 
-    /**
-     * @notice Attempts to deposit `dolaAmount` of DOLA & `usdcAmount` of USDC into Velodrome DOLA/USDC stable pool. Then, deposits LP tokens into gauge.
-     * @param dolaAmount Amount of DOLA to be added as liquidity in Velodrome DOLA/USDC pool
-     * @param usdcAmount Amount of USDC to be added as liquidity in Velodrome DOLA/USDC pool
-     */
-    function deposit(uint dolaAmount, uint usdcAmount) public onlyChair {
-        uint lpTokenPrice = getLpTokenPrice();
-
-        DOLA.approve(address(router), dolaAmount);
-        USDC.approve(address(router), usdcAmount);
-        (uint dolaSpent, uint usdcSpent, uint lpTokensReceived) = router.addLiquidity(address(DOLA), address(USDC), true, dolaAmount, usdcAmount, 0, 0, address(this), block.timestamp);
-        require(lpTokensReceived > 0, "No LP tokens received");
-
-        uint totalDolaValue = dolaSpent + (usdcSpent *DOLA_USDC_CONVERSION_MULTI);
-
-        uint expectedLpTokens = totalDolaValue *1e18 / lpTokenPrice *(PRECISION - maxSlippageBpsLiquidity) / PRECISION;
-        if (lpTokensReceived < expectedLpTokens) revert LiquiditySlippageTooHigh();
-        
-        LP_TOKEN.approve(address(dolaGauge), LP_TOKEN.balanceOf(address(this)));
-        dolaGauge.deposit(LP_TOKEN.balanceOf(address(this)));
-    }
 
     /**
      * @notice Attempts to deposit `dolaAmount` of DOLA & `usdcAmount` of USDC into Velodrome DOLA/USDC stable pool. Then, deposits LP tokens into gauge.
@@ -443,12 +414,6 @@ contract VeloFarmerV3 {
         dolaGaugeNative.deposit(lpBalance);
     }
 
-    /**
-     * @notice Calls `deposit()` with entire DOLA & USDC token balance of this contract.
-     */
-    function depositAll() external {
-        deposit(DOLA.balanceOf(address(this)), USDC.balanceOf(address(this)));
-    }
 
     /**
      * @notice Calls `deposit()` with entire DOLA & USDC token balance of this contract.
@@ -463,25 +428,6 @@ contract VeloFarmerV3 {
      * @param dolaAmount Desired dola value to remove from DOLA/USDC pool. Will attempt to remove 50/50 while allowing for `maxSlippageBpsLiquidity` bps of variance.
      * @return Amount of USDC received from liquidity removal. Used by withdrawLiquidityAndSwap wrapper.
      */
-    function withdrawLiquidity(uint dolaAmount) public onlyChair returns (uint) {
-        uint lpTokenPrice = getLpTokenPrice();
-        uint liquidityToWithdraw = dolaAmount *1e18 / lpTokenPrice;
-        uint ownedLiquidity = dolaGauge.balanceOf(address(this));
-
-        if (liquidityToWithdraw > ownedLiquidity) liquidityToWithdraw = ownedLiquidity;
-        dolaGauge.withdraw(liquidityToWithdraw);
-
-        LP_TOKEN.approve(address(router), liquidityToWithdraw);
-        (uint amountUSDC, uint amountDola) = router.removeLiquidity(address(USDC), address(DOLA), true, liquidityToWithdraw, 0, 0, address(this), block.timestamp);
-
-        uint totalDolaReceived = amountDola + (amountUSDC *DOLA_USDC_CONVERSION_MULTI);
-
-        if ((dolaAmount *(PRECISION - maxSlippageBpsLiquidity) / PRECISION) > totalDolaReceived) {
-            revert LiquiditySlippageTooHigh();
-        }
-
-        return amountUSDC;
-    }
 
     function withdrawLiquidityNative(uint dolaAmount) public onlyChair returns (uint) {
         uint lpTokenPrice = getLpTokenPriceNative();
@@ -490,7 +436,7 @@ contract VeloFarmerV3 {
 
         if (liquidityToWithdraw > ownedLiquidity) liquidityToWithdraw = ownedLiquidity;
         dolaGaugeNative.withdraw(liquidityToWithdraw);
-       // uint lpBalance = LP_TOKEN_NATIVE.balanceOf(address(this));
+   
         LP_TOKEN_NATIVE.approve(address(router), liquidityToWithdraw);
         (uint amountUSDC, uint amountDola) = router.removeLiquidity(address(nUSDC), address(DOLA), true, liquidityToWithdraw, 0, 0, address(this), block.timestamp);
 
@@ -507,12 +453,7 @@ contract VeloFarmerV3 {
      * @notice Withdraws `dolaAmount` worth of LP tokens from gauge. Then, redeems LP tokens for DOLA/USDC and swaps redeemed USDC to DOLA.
      * @param dolaAmount Desired dola value to remove from DOLA/USDC pool. Will attempt to remove 50/50 while allowing for `maxSlippageBpsLiquidity` bps of variance.
      */
-    function withdrawLiquidityAndSwapToDOLA(uint dolaAmount) external {
-        uint usdcAmount = withdrawLiquidity(dolaAmount);
-
-        swapUSDCtoDOLA(usdcAmount);
-    }
-
+    
     function withdrawLiquidityNativeAndSwapToDOLA(uint dolaAmount) external {
         uint usdcAmount = withdrawLiquidityNative(dolaAmount);
 
@@ -533,14 +474,6 @@ contract VeloFarmerV3 {
      * @param dolaAmount Amount of DOLA to withdraw and send to L1 OptiFed
      * @param usdcAmount Amount of USDC to withdraw and send to L1 OptiFed
      */
-    function withdrawToL1OptiFed(uint dolaAmount, uint usdcAmount) external onlyChair {
-        if (dolaAmount > DOLA.balanceOf(address(this))) revert NotEnoughTokens();
-        if (usdcAmount > USDC.balanceOf(address(this))) revert NotEnoughTokens();
-
-        bridge.withdrawTo(address(DOLA), optiFed, dolaAmount, 0, "");
-        bridge.withdrawTo(address(USDC), optiFed, usdcAmount, 0, "");
-    }
-
     function withdrawToL1OptiFedNative(uint dolaAmount, uint usdcAmount) external onlyChair {
         if (dolaAmount > DOLA.balanceOf(address(this))) revert NotEnoughTokens();
         if (usdcAmount > nUSDC.balanceOf(address(this))) revert NotEnoughTokens();
@@ -610,11 +543,6 @@ contract VeloFarmerV3 {
     /**
      * @notice Calculates approximate price of 1 Velodrome DOLA/USDC stable pool LP token
      */
-    function getLpTokenPrice() internal view returns (uint) {
-        (uint dolaAmountOneLP, uint usdcAmountOneLP) = router.quoteRemoveLiquidity(address(DOLA), address(USDC), true, factory, 0.001 ether);
-        usdcAmountOneLP *= DOLA_USDC_CONVERSION_MULTI;
-        return (dolaAmountOneLP + usdcAmountOneLP)*1000;
-    }
 
     function getLpTokenPriceNative() internal view returns (uint) {
         (uint dolaAmountOneLP, uint usdcAmountOneLP) = router.quoteRemoveLiquidity(address(DOLA), address(nUSDC), true, factory, 0.001 ether);
