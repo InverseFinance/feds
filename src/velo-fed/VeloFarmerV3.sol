@@ -313,7 +313,7 @@ contract VeloFarmerV3 {
     IERC20 public constant DOLA = IERC20(0x8aE125E8653821E851F12A49F7765db9a9ce7384);
     IERC20 public constant USDC = IERC20(0x7F5c764cBc14f9669B88837ca1490cCa17c31607);
     IERC20 public constant nUSDC = IERC20(0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85); // native USDC
-
+    uint32 public constant MAINNET_CCTP_DOMAIN = 0;
     IL2ERC20Bridge public bridge;
     address public optiFed;
     ICCTP public immutable cctp;
@@ -486,14 +486,14 @@ contract VeloFarmerV3 {
 
         bridge.withdrawTo(address(DOLA), optiFed, dolaAmount, 0, "");
         nUSDC.approve(address(cctp), usdcAmount);
-        cctp.depositForBurn(usdcAmount, 0, bytes32(uint256(uint160(optiFed)) << 96), address(nUSDC));
+        cctp.depositForBurn(usdcAmount, MAINNET_CCTP_DOMAIN, bytes32(uint256(uint160(optiFed)) << 96), address(nUSDC));
     }
 
     function withdrawToL1OptiFedNative(uint usdcAmount) external onlyChair {
         if (usdcAmount > nUSDC.balanceOf(address(this))) revert NotEnoughTokens();
         
         nUSDC.approve(address(cctp), usdcAmount);
-        cctp.depositForBurn(usdcAmount, 0, bytes32(uint256(uint160(optiFed)) << 96), address(nUSDC));
+        cctp.depositForBurn(usdcAmount, MAINNET_CCTP_DOMAIN, bytes32(uint256(uint160(optiFed)) << 96), address(nUSDC));
     }
 
     /**

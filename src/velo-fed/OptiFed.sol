@@ -49,7 +49,8 @@ contract OptiFed {
     address public constant DOLA_OPTI = 0x8aE125E8653821E851F12A49F7765db9a9ce7384;
     address public constant USDC_OPTI = 0x7F5c764cBc14f9669B88837ca1490cCa17c31607;
     ICurvePool public curvePool = ICurvePool(0xE57180685E3348589E9521aa53Af0BCD497E884d);
-    ICCTP public constant cctp = ICCTP(0xBd3fa81B58Ba92a82136038B25aDec7066af3155);
+    ICCTP public constant CCTP = ICCTP(0xBd3fa81B58Ba92a82136038B25aDec7066af3155);
+    uint32 public constant OPTIMISM_CCTP_DOMAIN = 2;
     address public veloFarmer;
 
     event Expansion(uint amount);
@@ -99,8 +100,8 @@ contract OptiFed {
         optiBridge.depositERC20To(address(DOLA), DOLA_OPTI, veloFarmer, dolaToBridge, 200_000, "");
 
         if(useCCTP){
-            USDC.approve(address(cctp), usdcAmount);
-            cctp.depositForBurn(usdcAmount, 2, bytes32(uint256(uint160(veloFarmer))), address(USDC));
+            USDC.approve(address(CCTP), usdcAmount);
+            CCTP.depositForBurn(usdcAmount, OPTIMISM_CCTP_DOMAIN, bytes32(uint256(uint160(veloFarmer))), address(USDC));
         } else {
             USDC.approve(address(optiBridge), usdcAmount);
             optiBridge.depositERC20To(address(USDC), USDC_OPTI, veloFarmer, usdcAmount, 200_000, "");
