@@ -291,15 +291,20 @@ contract VeloFarmerV3 {
     address public gov;
     address public treasury;
     address public guardian;
+
     uint public maxSlippageBpsDolaToUsdc;
     uint public maxSlippageBpsUsdcToDola;
     uint public maxSlippageBpsUsdcNativeToDola;
+    uint public maxSlippageBpsDolaToUsdcNative;
+    uint public maxSlippageBpsUsdcToUsdcNative;
+    uint public maxSlippageBpsUsdcNativeToUsdc;
+
     uint public maxSlippageBpsLiquidity;
 
     uint public constant DOLA_USDC_CONVERSION_MULTI= 1e12;
     uint public constant PRECISION = 10_000;
 
-    IGauge public constant dolaGaugeNative = IGauge(0x853CAcEc83e4183eF78d6b64ccca3de365861CaF); 
+    IGauge public constant dolaGauge = IGauge(0x853CAcEc83e4183eF78d6b64ccca3de365861CaF); 
     IERC20 public constant LP_TOKEN_NATIVE = IERC20(0xA56a25Dee5B3199A9198Bbd48715EE3D0ed98378);
     address public constant veloTokenAddr = 0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db;
     address public constant factory = 0xF1046053aa5682b4F9a81b5481394DA16BE5FF5a;
@@ -331,9 +336,7 @@ contract VeloFarmerV3 {
         address bridge_,
         address optiFed_,
         address cctp_,
-        uint maxSlippageBpsDolaToUsdc_,
-        uint maxSlippageBpsUsdcToDola_,
-        uint maxSlippageBpsUsdcNativeToDola_,
+        uint[] memory maxSlippageBps,
         uint maxSlippageBpsLiquidity_
         )
     {
@@ -345,9 +348,12 @@ contract VeloFarmerV3 {
         bridge = IL2ERC20Bridge(bridge_);
         optiFed = optiFed_;
         cctp = ICCTP(cctp_);
-        maxSlippageBpsDolaToUsdc = maxSlippageBpsDolaToUsdc_;
-        maxSlippageBpsUsdcToDola = maxSlippageBpsUsdcToDola_;
-        maxSlippageBpsUsdcNativeToDola = maxSlippageBpsUsdcNativeToDola_;
+        maxSlippageBpsDolaToUsdc = maxSlippageBps[0];
+        maxSlippageBpsUsdcToDola = maxSlippageBps[1];
+        maxSlippageBpsUsdcNativeToDola = maxSlippageBps[2];
+        maxSlippageBpsDolaToUsdcNative = maxSlippageBps[3];
+        maxSlippageBpsUsdcToUsdcNative = maxSlippageBps[4];
+        maxSlippageBpsUsdcNativeToUsdc = maxSlippageBps[5];
         maxSlippageBpsLiquidity = maxSlippageBpsLiquidity_;
     }
 
@@ -384,8 +390,8 @@ contract VeloFarmerV3 {
     /**
      * @notice Claims all VELO token rewards accrued by this contract & transfer all VELO owned by this contract to `treasury`
      */
-    function claimVeloRewardsNative() external {
-        dolaGaugeNative.getReward(address(this));
+    function claimVeloRewards() external {
+        dolaGauge.getReward(address(this));
 
         IERC20(veloTokenAddr).transfer(treasury, IERC20(veloTokenAddr).balanceOf(address(this)));
     }
@@ -396,8 +402,8 @@ contract VeloFarmerV3 {
      * @param dolaAmount Amount of DOLA to be added as liquidity in Velodrome DOLA/USDC pool
      * @param usdcAmount Amount of USDC to be added as liquidity in Velodrome DOLA/USDC pool
      */
-    function depositNative(uint dolaAmount, uint usdcAmount) public onlyChair {
-        uint lpTokenPrice = getLpTokenPriceNative();
+    function deposit(uint dolaAmount, uint usdcAmount) public onlyChair {
+        uint lpTokenPrice = getLpTokenPrice();
 
         DOLA.approve(address(router), dolaAmount);
         nUSDC.approve(address(router), usdcAmount);
@@ -410,16 +416,16 @@ contract VeloFarmerV3 {
         if (lpTokensReceived < expectedLpTokens) revert LiquiditySlippageTooHigh();
         
         uint lpBalance = LP_TOKEN_NATIVE.balanceOf(address(this));
-        LP_TOKEN_NATIVE.approve(address(dolaGaugeNative), lpBalance);
-        dolaGaugeNative.deposit(lpBalance);
+        LP_TOKEN_NATIVE.approve(address(dolaGauge), lpBalance);
+        dolaGauge.deposit(lpBalance);
     }
 
 
     /**
      * @notice Calls `deposit()` with entire DOLA & USDC token balance of this contract.
      */
-    function depositAllNative() external {
-        depositNative(DOLA.balanceOf(address(this)), nUSDC.balanceOf(address(this)));
+    function depositAll() external {
+        deposit(DOLA.balanceOf(address(this)), nUSDC.balanceOf(address(this)));
     }
 
     /**
@@ -429,13 +435,13 @@ contract VeloFarmerV3 {
      * @return Amount of USDC received from liquidity removal. Used by withdrawLiquidityAndSwap wrapper.
      */
 
-    function withdrawLiquidityNative(uint dolaAmount) public onlyChair returns (uint) {
-        uint lpTokenPrice = getLpTokenPriceNative();
+    function withdrawLiquidity(uint dolaAmount) public onlyChair returns (uint) {
+        uint lpTokenPrice = getLpTokenPrice();
         uint liquidityToWithdraw = dolaAmount *1e18 / lpTokenPrice;
-        uint ownedLiquidity = dolaGaugeNative.balanceOf(address(this));
+        uint ownedLiquidity = dolaGauge.balanceOf(address(this));
 
         if (liquidityToWithdraw > ownedLiquidity) liquidityToWithdraw = ownedLiquidity;
-        dolaGaugeNative.withdraw(liquidityToWithdraw);
+        dolaGauge.withdraw(liquidityToWithdraw);
    
         LP_TOKEN_NATIVE.approve(address(router), liquidityToWithdraw);
         (uint amountUSDC, uint amountDola) = router.removeLiquidity(address(nUSDC), address(DOLA), true, liquidityToWithdraw, 0, 0, address(this), block.timestamp);
@@ -454,8 +460,8 @@ contract VeloFarmerV3 {
      * @param dolaAmount Desired dola value to remove from DOLA/USDC pool. Will attempt to remove 50/50 while allowing for `maxSlippageBpsLiquidity` bps of variance.
      */
     
-    function withdrawLiquidityNativeAndSwapToDOLA(uint dolaAmount) external {
-        uint usdcAmount = withdrawLiquidityNative(dolaAmount);
+    function withdrawLiquidityAndSwapToDOLA(uint dolaAmount) external {
+        uint usdcAmount = withdrawLiquidity(dolaAmount);
 
         swapUSDCNativetoDOLA(usdcAmount);
     }
@@ -515,6 +521,10 @@ contract VeloFarmerV3 {
         router.swapExactTokensForTokens(usdcAmount, minOut, getRoute(address(USDC), address(DOLA)), address(this), block.timestamp);
     }
 
+    /**
+     * @notice Swap `usdcAmount` of USDC to DOLA through velodrome.
+     * @param usdcAmount Amount of USDC to swap to DOLA
+     */
     function swapUSDCNativetoDOLA(uint usdcAmount) public onlyChair {
         uint minOut = usdcAmount *(PRECISION - maxSlippageBpsUsdcNativeToDola) / PRECISION *DOLA_USDC_CONVERSION_MULTI;
 
@@ -533,18 +543,41 @@ contract VeloFarmerV3 {
         router.swapExactTokensForTokens(dolaAmount, minOut, getRoute(address(DOLA), address(USDC)), address(this), block.timestamp);
     }
 
+    /**
+     * @notice Swap `dolaAmount` of DOLA to USDC Native through velodrome.
+     */
     function swapDOLAtoUSDCNative(uint dolaAmount) public onlyChair { 
-        uint minOut = dolaAmount *(PRECISION - maxSlippageBpsUsdcNativeToDola) / PRECISION / DOLA_USDC_CONVERSION_MULTI;
+        uint minOut = dolaAmount *(PRECISION - maxSlippageBpsDolaToUsdcNative) / PRECISION / DOLA_USDC_CONVERSION_MULTI;
         
         DOLA.approve(address(router), dolaAmount);
         router.swapExactTokensForTokens(dolaAmount, minOut, getRoute(address(DOLA), address(nUSDC)), address(this), block.timestamp);
     }
 
     /**
+     * @notice Swap `usdcAmount` of USDC to USDC Native through velodrome.
+     */
+    function swapUSDCtoUSDCNative(uint usdcAmount) public onlyChair {
+        uint minOut = usdcAmount *(PRECISION - maxSlippageBpsUsdcToUsdcNative) / PRECISION;
+        USDC.approve(address(router), usdcAmount);
+        router.swapExactTokensForTokens(usdcAmount, minOut, getRoute(address(USDC), address(nUSDC)), address(this), block.timestamp);
+    }
+
+    /**
+     * @notice Swap `usdcAmount` of USDC Native to USDC through velodrome.
+     */
+    function swapUSDCNativeToUSDC(uint usdcAmount) public onlyChair {
+        uint minOut = usdcAmount *(PRECISION - maxSlippageBpsUsdcNativeToUsdc) / PRECISION *DOLA_USDC_CONVERSION_MULTI;
+
+        nUSDC.approve(address(router), usdcAmount);
+        router.swapExactTokensForTokens(usdcAmount, minOut, getRoute(address(nUSDC), address(USDC)), address(this), block.timestamp);
+    }
+
+
+    /**
      * @notice Calculates approximate price of 1 Velodrome DOLA/USDC stable pool LP token
      */
 
-    function getLpTokenPriceNative() internal view returns (uint) {
+    function getLpTokenPrice() internal view returns (uint) {
         (uint dolaAmountOneLP, uint usdcAmountOneLP) = router.quoteRemoveLiquidity(address(DOLA), address(nUSDC), true, factory, 0.001 ether);
         usdcAmountOneLP *= DOLA_USDC_CONVERSION_MULTI;
         return (dolaAmountOneLP + usdcAmountOneLP)*1000;
@@ -590,6 +623,26 @@ contract VeloFarmerV3 {
     function setMaxSlippageUsdcToDola(uint newMaxSlippageBps) onlyGovOrGuardian external {
         if (newMaxSlippageBps > 10000) revert MaxSlippageTooHigh();
         maxSlippageBpsUsdcToDola = newMaxSlippageBps;
+    }
+
+    function setMaxSlippageUsdcNativeToDola(uint newMaxSlippageBps) onlyGovOrGuardian external {
+        if (newMaxSlippageBps > 10000) revert MaxSlippageTooHigh();
+        maxSlippageBpsUsdcNativeToDola = newMaxSlippageBps;
+    }
+
+    function setMaxSlippageDolaToUsdcNative(uint newMaxSlippageBps) onlyGovOrGuardian external {
+        if (newMaxSlippageBps > 10000) revert MaxSlippageTooHigh();
+        maxSlippageBpsDolaToUsdcNative = newMaxSlippageBps;
+    }
+
+    function setMaxSlippageUsdcToUsdcNative(uint newMaxSlippageBps) onlyGovOrGuardian external {
+        if (newMaxSlippageBps > 10000) revert MaxSlippageTooHigh();
+        maxSlippageBpsUsdcToUsdcNative = newMaxSlippageBps;
+    }
+
+    function setMaxSlippageUsdcNativeToUsdc(uint newMaxSlippageBps) onlyGovOrGuardian external {
+        if (newMaxSlippageBps > 10000) revert MaxSlippageTooHigh();
+        maxSlippageBpsUsdcNativeToUsdc = newMaxSlippageBps;
     }
 
     /**

@@ -100,6 +100,22 @@ contract VeloFarmerMessenger {
         sendMessage(abi.encodeWithSignature("setMaxSlippageUsdcToDola(uint256)", newSlippage_));
     }
 
+    function setMaxSlippageDolaToUsdcNative(uint newSlippage_) public onlyGovOrGuardian {
+        sendMessage(abi.encodeWithSignature("setMaxSlippageDolaToUsdcNative(uint256)", newSlippage_));
+    }
+
+    function setMaxSlippageUsdcNativeToDola(uint newSlippage_) public onlyGovOrGuardian {
+        sendMessage(abi.encodeWithSignature("setMaxSlippageUsdcNativeToDola(uint256)", newSlippage_));
+    }
+
+    function setMaxSlippageUsdcToUsdcNative(uint newSlippage_) public onlyGovOrGuardian {
+        sendMessage(abi.encodeWithSignature("setMaxSlippageUsdcToUsdcNative(uint256)", newSlippage_));
+    }
+
+    function setMaxSlippageUsdcNativeToUsdc(uint newSlippage_) public onlyGovOrGuardian {
+        sendMessage(abi.encodeWithSignature("setMaxSlippageUsdcNativeToUsdc(uint256)", newSlippage_));
+    }
+
     function setMaxSlippageLiquidity(uint newSlippage_) public onlyGovOrGuardian {
         sendMessage(abi.encodeWithSignature("setMaxSlippageLiquidity(uint256)", newSlippage_));
     }
@@ -162,8 +178,12 @@ contract VeloFarmerMessenger {
         sendMessage(abi.encodeWithSignature("withdrawToL1OptiFed(uint256)", dolaAmount));
     }
 
-    function withdrawToL1OptiFed(uint dolaAmount, uint usdcAmount) public onlyChair {
-        sendMessage(abi.encodeWithSignature("withdrawToL1OptiFed(uint256,uint256)", dolaAmount, usdcAmount));
+    function withdrawToL1OptiFedNative(uint dolaAmount, uint usdcAmount) public onlyChair {
+        sendMessage(abi.encodeWithSignature("withdrawToL1OptiFedNative(uint256,uint256)", dolaAmount, usdcAmount));
+    }
+
+    function withdrawToL1OptiFedNative(uint usdcAmount) public onlyChair {
+        sendMessage(abi.encodeWithSignature("withdrawToL1OptiFedNative(uint256)", usdcAmount));
     }
 
     function withdrawTokensToL1(address l2Token, address to, uint amount) public onlyChair {
@@ -178,6 +198,22 @@ contract VeloFarmerMessenger {
         sendMessage(abi.encodeWithSignature("swapDOLAtoUSDC(uint256)", usdcAmount));
     }
 
+    function swapDOLAtoUSDCNative(uint dolaAmount) public onlyChair {
+        sendMessage(abi.encodeWithSignature("swapDOLAtoUSDCNative(uint256)", dolaAmount));
+    }
+
+    function swapUSDCNativetoDOLA(uint usdcAmount) public onlyChair {
+        sendMessage(abi.encodeWithSignature("swapUSDCNativetoDOLA(uint256)", usdcAmount));
+    }
+
+    function swapUSDCtoUSDCNative(uint usdcAmount) public onlyChair {
+        sendMessage(abi.encodeWithSignature("swapUSDCtoUSDCNative(uint256)", usdcAmount));
+    }
+
+    function swapUSDCNativetoUSDC(uint usdcAmount) public onlyChair {
+        sendMessage(abi.encodeWithSignature("swapUSDCNativetoUSDC(uint256)", usdcAmount));
+    }
+    
     function resign() public onlyChair {
         sendMessage(abi.encodeWithSignature("resign()"));
     }
