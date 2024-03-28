@@ -486,14 +486,14 @@ contract VeloFarmerV3 {
 
         bridge.withdrawTo(address(DOLA), optiFed, dolaAmount, 0, "");
         nUSDC.approve(address(cctp), usdcAmount);
-        cctp.depositForBurn(usdcAmount, MAINNET_CCTP_DOMAIN, bytes32(uint256(uint160(optiFed)) << 96), address(nUSDC));
+        cctp.depositForBurn(usdcAmount, MAINNET_CCTP_DOMAIN, bytes32(uint256(uint160(optiFed))), address(nUSDC));
     }
 
     function withdrawToL1OptiFedNative(uint usdcAmount) external onlyChair {
         if (usdcAmount > nUSDC.balanceOf(address(this))) revert NotEnoughTokens();
         
         nUSDC.approve(address(cctp), usdcAmount);
-        cctp.depositForBurn(usdcAmount, MAINNET_CCTP_DOMAIN, bytes32(uint256(uint160(optiFed)) << 96), address(nUSDC));
+        cctp.depositForBurn(usdcAmount, MAINNET_CCTP_DOMAIN, bytes32(uint256(uint160(optiFed))), address(nUSDC));
     }
 
     /**
