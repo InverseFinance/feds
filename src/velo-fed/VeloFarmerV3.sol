@@ -514,7 +514,7 @@ contract VeloFarmerV3 {
      * @notice Swap `usdcAmount` of USDC to DOLA through velodrome.
      * @param usdcAmount Amount of USDC to swap to DOLA
      */
-    function swapUSDCtoDOLA(uint usdcAmount) public onlyChair {
+    function swapUSDCtoDOLA(uint usdcAmount) external onlyChair {
         uint minOut = usdcAmount *(PRECISION - maxSlippageBpsUsdcToDola) / PRECISION *DOLA_USDC_CONVERSION_MULTI;
 
         USDC.approve(address(router), usdcAmount);
@@ -536,7 +536,7 @@ contract VeloFarmerV3 {
      * @notice Swap `dolaAmount` of DOLA to USDC through velodrome.
      * @param dolaAmount Amount of DOLA to swap to USDC
      */
-    function swapDOLAtoUSDC(uint dolaAmount) public onlyChair { 
+    function swapDOLAtoUSDC(uint dolaAmount) external onlyChair { 
         uint minOut = dolaAmount *(PRECISION - maxSlippageBpsDolaToUsdc) / PRECISION / DOLA_USDC_CONVERSION_MULTI;
         
         DOLA.approve(address(router), dolaAmount);
@@ -546,7 +546,7 @@ contract VeloFarmerV3 {
     /**
      * @notice Swap `dolaAmount` of DOLA to USDC Native through velodrome.
      */
-    function swapDOLAtoUSDCNative(uint dolaAmount) public onlyChair { 
+    function swapDOLAtoUSDCNative(uint dolaAmount) external onlyChair { 
         uint minOut = dolaAmount *(PRECISION - maxSlippageBpsDolaToUsdcNative) / PRECISION / DOLA_USDC_CONVERSION_MULTI;
         
         DOLA.approve(address(router), dolaAmount);
@@ -556,7 +556,7 @@ contract VeloFarmerV3 {
     /**
      * @notice Swap `usdcAmount` of USDC to USDC Native through velodrome.
      */
-    function swapUSDCtoUSDCNative(uint usdcAmount) public onlyChair {
+    function swapUSDCtoUSDCNative(uint usdcAmount) external onlyChair {
         uint minOut = usdcAmount *(PRECISION - maxSlippageBpsUsdcToUsdcNative) / PRECISION;
         USDC.approve(address(router), usdcAmount);
         router.swapExactTokensForTokens(usdcAmount, minOut, getRoute(address(USDC), address(nUSDC)), address(this), block.timestamp);
@@ -566,7 +566,7 @@ contract VeloFarmerV3 {
      * @notice Swap `usdcAmount` of USDC Native to USDC through velodrome.
      */
     function swapUSDCNativeToUSDC(uint usdcAmount) public onlyChair {
-        uint minOut = usdcAmount *(PRECISION - maxSlippageBpsUsdcNativeToUsdc) / PRECISION *DOLA_USDC_CONVERSION_MULTI;
+        uint minOut = usdcAmount *(PRECISION - maxSlippageBpsUsdcNativeToUsdc) / PRECISION;
 
         nUSDC.approve(address(router), usdcAmount);
         router.swapExactTokensForTokens(usdcAmount, minOut, getRoute(address(nUSDC), address(USDC)), address(this), block.timestamp);

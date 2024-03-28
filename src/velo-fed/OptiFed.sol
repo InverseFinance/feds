@@ -81,8 +81,9 @@ contract OptiFed {
     @notice Mints `dolaAmount` of DOLA, swaps `dolaToSwap` of DOLA to USDC, then transfers all to `veloFarmer` through optimism bridge
     @param dolaAmount Amount of DOLA to mint
     @param dolaToSwap Amount of DOLA to swap for USDC
+    @param useCCTP If true, will use CCTP to bridge USDC. If false, will use Optimism bridge
     */
-    function expansionAndSwap(uint dolaAmount, uint dolaToSwap) external {
+    function expansionAndSwap(uint dolaAmount, uint dolaToSwap, bool useCCTP) external {
         if (msg.sender != chair) revert OnlyChair();
         if (dolaToSwap > dolaAmount) revert SwapMoreDolaThanMinted();
         
@@ -94,11 +95,17 @@ contract OptiFed {
 
         uint dolaToBridge = dolaAmount - dolaToSwap;
         DOLA.approve(address(optiBridge), dolaToBridge);
-        USDC.approve(address(cctp), usdcAmount);
-
+        
         optiBridge.depositERC20To(address(DOLA), DOLA_OPTI, veloFarmer, dolaToBridge, 200_000, "");
-        cctp.depositForBurn(usdcAmount, 2, bytes32(uint256(uint160(veloFarmer))), address(USDC));
-      
+
+        if(useCCTP){
+            USDC.approve(address(cctp), usdcAmount);
+            cctp.depositForBurn(usdcAmount, 2, bytes32(uint256(uint160(veloFarmer))), address(USDC));
+        } else {
+            USDC.approve(address(optiBridge), usdcAmount);
+            optiBridge.depositERC20To(address(USDC), USDC_OPTI, veloFarmer, usdcAmount, 200_000, "");
+        }
+
         emit Expansion(dolaAmount);
     }
 

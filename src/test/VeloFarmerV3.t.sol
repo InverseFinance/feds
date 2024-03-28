@@ -271,6 +271,50 @@ contract VeloFarmerV3Test is Test {
         assertGt(VELO.balanceOf(address(treasury)), initialVelo, "No rewards claimed");
     }
 
+    function testL2_swap_USDCNativeToUSDC() public {
+        gibUSDCNative(address(fed), usdcAmount * 3);
+
+        assertEq(USDC.balanceOf(address(fed)),0, "Wrong balance");
+        
+        vm.prank(l2chair);
+        fed.swapUSDCNativeToUSDC(usdcAmount * 3);
+
+        assertGt(USDC.balanceOf(address(fed)),0, "Failed swap");
+    }
+
+    function testL2_swap_USDCToUSDCNative() public {
+        gibUSDC(address(fed), usdcAmount * 3);
+
+        assertEq(nUSDC.balanceOf(address(fed)),0, "Wrong balance");
+    
+        vm.prank(l2chair);
+        fed.swapUSDCtoUSDCNative(uint(usdcAmount * 3));
+
+        assertGt(nUSDC.balanceOf(address(fed)),0, "Failed swap");
+    }
+
+    function testL2_swap_USDCToDOLA() public {
+        gibUSDC(address(fed), usdcAmount * 3);
+
+        assertEq(DOLA.balanceOf(address(fed)),0, "Wrong balance");
+    
+        vm.prank(l2chair);
+        fed.swapUSDCtoDOLA(uint(usdcAmount * 3));
+
+        assertGt(DOLA.balanceOf(address(fed)),0, "Failed swap");
+    }
+
+    function testL2_swap_DOLAToUSDC() public {
+        gibDOLA(address(fed), dolaAmount * 3);
+
+        assertEq(USDC.balanceOf(address(fed)),0, "Wrong balance");
+    
+        vm.prank(l2chair);
+        fed.swapDOLAtoUSDC(uint(dolaAmount * 3));
+
+        assertGt(USDC.balanceOf(address(fed)),0, "Failed swap");
+    }
+
     function testL2_Deposit_Succeeds_WhenSlippageLtMaxLiquiditySlippage() public {
         gibDOLA(address(fed), dolaAmount);
         gibUSDCNative(address(fed), usdcAmount * 2);

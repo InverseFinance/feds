@@ -64,22 +64,36 @@ contract OptiFedMainnetTest is Test {
         assertEq(prevBal + dolaAmount, DOLA.balanceOf(l1optiBridgeAddress));
     }
 
-    function testL1_OptiFedExpansionAndSwap_Half() public {
+    function testL1_OptiFedExpansionAndSwap_Half_CCTP() public {
+        vm.startPrank(chair);
+
+        uint prevDolaBal = DOLA.balanceOf(l1optiBridgeAddress);
+     
+        fed.expansionAndSwap(dolaAmount, dolaAmount / 2, true);
+
+        assertEq(prevDolaBal + dolaAmount / 2, DOLA.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of DOLA");
+        assertEq(USDC.balanceOf(address(fed)),0, "CCTP Burn Failed");
+    }
+
+    
+
+    function testL1_OptiFedExpansionAndSwap_Half_NO_CCTP() public {
         vm.startPrank(chair);
 
         uint prevDolaBal = DOLA.balanceOf(l1optiBridgeAddress);
         uint prevUsdcBal = USDC.balanceOf(l1optiBridgeAddress);
 
-        fed.expansionAndSwap(dolaAmount, dolaAmount / 2);
+        fed.expansionAndSwap(dolaAmount, dolaAmount / 2, false);
 
         uint estimatedUsdcAmount = dolaAmount / 2 / 1e12;
 
         assertEq(prevDolaBal + dolaAmount / 2, DOLA.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of DOLA");
-        assertEq(USDC.balanceOf(address(fed)),0, "CCTP Burn Failed");
-
-        // assertGt(prevUsdcBal + estimatedUsdcAmount * 1001 / 1000, USDC.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of USDC");
-        // assertLt(prevUsdcBal + estimatedUsdcAmount, USDC.balanceOf(l1optiBridgeAddress) * 1001/1000, "Bridge didn't receive correct amount of USDC");
+        
+        assertGt(prevUsdcBal + estimatedUsdcAmount * 1001 / 1000, USDC.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of USDC");
+        assertLt(prevUsdcBal + estimatedUsdcAmount, USDC.balanceOf(l1optiBridgeAddress) * 1001/1000, "Bridge didn't receive correct amount of USDC");
     }
+
+    
 
     function testL1_OptiFedExpansionAndSwap(uint8 multi) public {
         uint256 multiplier = bound(uint(multi), 1, 10);
@@ -91,15 +105,30 @@ contract OptiFedMainnetTest is Test {
         uint prevDolaBal = DOLA.balanceOf(l1optiBridgeAddress);
         uint prevUsdcBal = USDC.balanceOf(l1optiBridgeAddress);
 
-        fed.expansionAndSwap(dolaAmount, dolaToSwap);
+        fed.expansionAndSwap(dolaAmount, dolaToSwap, false);
 
         uint estimatedUsdcAmount = dolaToSwap / 1e12;
 
         assertEq(prevDolaBal + dolaToBridge, DOLA.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of DOLA");
+
+        assertGt(prevUsdcBal + estimatedUsdcAmount * 1001 / 1000, USDC.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of USDC");
+        assertLt(prevUsdcBal + estimatedUsdcAmount, USDC.balanceOf(l1optiBridgeAddress) * 1001/1000, "Bridge didn't receive correct amount of USDC");
+    }
+
+    function testL1_OptiFedExpansionAndSwap_CCTP(uint8 multi) public {
+        uint256 multiplier = bound(uint(multi), 1, 10);
+        uint dolaToSwap = dolaAmount * multiplier / 10;
+        uint dolaToBridge = dolaAmount - dolaToSwap;
+
+        vm.startPrank(chair);
+
+        uint prevDolaBal = DOLA.balanceOf(l1optiBridgeAddress);
+
+        fed.expansionAndSwap(dolaAmount, dolaToSwap, true);
+
+        assertEq(prevDolaBal + dolaToBridge, DOLA.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of DOLA");
         assertEq(USDC.balanceOf(address(fed)),0, "CCTP Burn Failed");
 
-        // assertGt(prevUsdcBal + estimatedUsdcAmount * 1001 / 1000, USDC.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of USDC");
-        // assertLt(prevUsdcBal + estimatedUsdcAmount, USDC.balanceOf(l1optiBridgeAddress) * 1001/1000, "Bridge didn't receive correct amount of USDC");
     }
 
     function testL1_OptiFedExpansionAndSwap_Fails_IfSlippageRestraintUnmet() public {
@@ -112,7 +141,7 @@ contract OptiFedMainnetTest is Test {
 
         vm.startPrank(chair);
         vm.expectRevert();
-        fed.expansionAndSwap(dolaAmount, dolaAmount / 2);
+        fed.expansionAndSwap(dolaAmount, dolaAmount / 2, true);
     }
 
     function testL1_OptiFedSwapDOLAtoUSDC() public {
