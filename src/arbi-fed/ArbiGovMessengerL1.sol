@@ -1,11 +1,9 @@
 pragma solidity ^0.8.13;
 
-import {IL1GatewayRouter} from "arbitrum/tokenbridge/ethereum/gateway/IL1GatewayRouter.sol";
 import {IInbox} from "arbitrum-nitro/contracts/src/bridge/IInbox.sol";
 import "src/arbi-fed/ArbiGasManager.sol";
 
 contract ArbiGovMessengerL1 is ArbiGasManager{
-    IL1GatewayRouter public immutable gatewayRouter = IL1GatewayRouter(0x72Ce9c846789fdB6fC1f34aC4AD25Dd9ef7031ef); 
     
     IInbox public inbox;
     mapping(address => bool) public allowList;
