@@ -499,15 +499,14 @@ contract VeloFarmerV3 {
     /**
      * @notice Withdraws `amount` of `l2Token` to address `to` on L1. Will take 7 days before withdraw is claimable.
      * @param l2Token Address of the L2 token to be withdrawn
-     * @param to L1 Address that tokens will be sent to
      * @param amount Amount of the L2 token to be withdrawn
      */
-    function withdrawTokensToL1(address l2Token, address to, uint amount) external onlyChair {
+    function withdrawTokensToL1(address l2Token, uint amount) external onlyChair {
         if (amount > IERC20(l2Token).balanceOf(address(this))) revert NotEnoughTokens();
         if(l2Token == address(DOLA) || l2Token == address(nUSDC)) revert RestrictedToken();
 
         IERC20(l2Token).approve(address(bridge), amount);
-        bridge.withdrawTo(address(l2Token), to, amount, 0, "");
+        bridge.withdrawTo(address(l2Token), treasury, amount, 0, "");
     }
 
     /**
