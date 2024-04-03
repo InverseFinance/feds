@@ -3,7 +3,6 @@ pragma solidity ^0.8.10;
 
 import "src/interfaces/IERC20.sol";
 import "src/interfaces/curve/IMetaPool.sol";
-import "src/interfaces/curve/IZapDepositor3pool.sol";
 
 abstract contract CurvePoolAdapterV2 {
 
@@ -22,7 +21,7 @@ abstract contract CurvePoolAdapterV2 {
      * @notice Function for depositing into curve metapool.
      * @param amountDola Amount of dola to be deposited into metapool
      * @param allowedSlippage Max allowed slippage. 1 = 0.01%
-     * @return Amount of Dola-3CRV tokens bought
+     * @return Amount of Dola-Metapool tokens bought
      */
     function metapoolDeposit(uint256 amountDola, uint allowedSlippage) internal returns(uint256){
         uint[2] memory amounts = [amountDola, 0];
