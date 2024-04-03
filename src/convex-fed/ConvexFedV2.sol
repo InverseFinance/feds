@@ -143,7 +143,7 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     }
 
     /**
-    * @notice Deposits amount of dola tokens into yEarn vault
+    * @notice Deposits amount of dola tokens into convex
     * @param amount Amount of dola token to deposit into yEarn vault
     */
     function expansion(uint amount) public onlyRole(chair){
@@ -209,7 +209,8 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     }
 
     /**
-    * @notice Burns the remaining dola supply. Useful in case of the FED being completely contracted and wanting to pay off remaining bad debts.
+    * @notice Burns amount of dola supply with a maximum of the entire dola supply.
+    * @param amount Amount of dola supply to be burnt.
     */
     function burnDolaSupply(uint amount) public {
         if(amount > dolaSupply){
