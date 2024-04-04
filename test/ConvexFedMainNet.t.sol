@@ -192,7 +192,7 @@ contract ConvexFedTest is DSTest {
         vm.stopPrank();
     }
 
-    function testTakeProfit_NoProfit_whenCallingWhenUnprofitable() public {
+    function testTakeProfit_NoProfit_whenCallingSameBlock() public {
         vm.startPrank(chair);
         convexFed.expansion(100_000 ether);
         uint initialCvx = cvx.balanceOf(gov);

@@ -20,7 +20,6 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     uint public dolaSupply;
     uint public maxLossExpansionBps;
     uint public maxLossWithdrawBps;
-    uint public maxLossTakeProfitBps;
     uint public guardianMaxLossBpsLimit;
 
     event Expansion(uint amount);
@@ -37,7 +36,6 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
             address _guardian,
             uint _maxLossExpansionBps,
             uint _maxLossWithdrawBps,
-            uint _maxLossTakeProfitBps,
             uint _guardianMaxLossBpsLimit
             )
             CurvePoolAdapterV2(_crvPoolAddr)
@@ -51,7 +49,6 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
         IERC20(_crvPoolAddr).approve(_baseRewardPool, type(uint256).max);
         maxLossExpansionBps = _maxLossExpansionBps;
         maxLossWithdrawBps = _maxLossWithdrawBps;
-        maxLossTakeProfitBps = _maxLossTakeProfitBps;
         guardianMaxLossBpsLimit = _guardianMaxLossBpsLimit;
         chair = _chair;
         gov = _gov;
@@ -70,36 +67,39 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
 
     /**
     * @notice Method for gov to change gov address
+    * @param _newGov Address of the new governor
     */
-    function setPendingGov(address _newGov) public onlyRole(gov){
+    function setPendingGov(address _newGov) external onlyRole(gov){
         pendingGov = _newGov;
     }
 
     /**
     * @notice Claim governance role
     */
-    function claimGov() public onlyRole(pendingGov){
+    function claimGov() external onlyRole(pendingGov){
         gov = pendingGov;
         pendingGov = address(0);
     }
 
     /**
     * @notice Method for gov to change the chair
+    * @param _newChair Address of the new chair
     */
-    function changeChair(address newChair_) public onlyRole(gov){
-        chair = newChair_;
+    function changeChair(address _newChair) external onlyRole(gov){
+        chair = _newChair;
     }
     /**
     * @notice Method for gov to change the guardian
+    * @param _newGuardian Address of the new guardian
     */
-    function changeGuardian(address newGuardian_) public onlyRole(gov){
-        guardian = newGuardian_;
+    function changeGuardian(address _newGuardian) external onlyRole(gov){
+        guardian = _newGuardian;
     }
 
     /**
     * @notice Method for current to resign
     */
-    function resign() public onlyRole(chair){
+    function resign() external onlyRole(chair){
         chair = address(0);
     }
 
@@ -107,7 +107,7 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     * @notice Set the maximum acceptable loss when expanding dola supply. Only callable by gov.
     * @param newMaxLossExpansionBps The maximum loss allowed by basis points 1 = 0.01%
     */
-    function setMaxLossExpansionBps(uint newMaxLossExpansionBps) public onlyRole(gov){
+    function setMaxLossExpansionBps(uint newMaxLossExpansionBps) external onlyRole(gov){
         require(newMaxLossExpansionBps <= 10000, "Max loss > 100%");
         maxLossExpansionBps = newMaxLossExpansionBps;
     }
@@ -116,7 +116,7 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     * @notice Set the maximum acceptable loss when withdrawing dola supply. Only callable by gov or guardian.
     * @param newMaxLossWithdrawBps The maximum loss allowed by basis points 1 = 0.01%
     */
-    function setMaxLossWithdrawBps(uint newMaxLossWithdrawBps) public onlyRoleOrGov(guardian){
+    function setMaxLossWithdrawBps(uint newMaxLossWithdrawBps) external onlyRoleOrGov(guardian){
         require(newMaxLossWithdrawBps <= 10000, "Max loss > 100%");
         if(msg.sender == guardian){
             require(newMaxLossWithdrawBps <= guardianMaxLossBpsLimit, "Max loss > guardian limit");
@@ -125,19 +125,10 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     }
 
     /**
-    * @notice Set the maximum acceptable loss when Taking Profit from LP tokens. Only callable by gov.
-    * @param newMaxLossTakeProfitBps The maximum loss allowed by basis points 1 = 0.01%
-    */
-    function setMaxLossTakeProfitBps(uint newMaxLossTakeProfitBps) public onlyRole(gov){
-        require(newMaxLossTakeProfitBps <= 10000, "Max loss >  100%");
-        maxLossTakeProfitBps = newMaxLossTakeProfitBps;   
-    }
-
-    /**
     * @notice Set limit of the max loss setable by guardian.
     * @param newGuardianMaxLossBpsLimit The maximum loss allowed by basis points 1 = 0.01%
     */
-    function setGuardianMaxLossBpsLimit(uint newGuardianMaxLossBpsLimit) public onlyRole(gov){
+    function setGuardianMaxLossBpsLimit(uint newGuardianMaxLossBpsLimit) external onlyRole(gov){
         require(newGuardianMaxLossBpsLimit <= 10000, "Max loss > 100%");
         guardianMaxLossBpsLimit = newGuardianMaxLossBpsLimit;   
     }
@@ -146,7 +137,7 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     * @notice Deposits amount of dola tokens into convex
     * @param amount Amount of dola token to deposit into yEarn vault
     */
-    function expansion(uint amount) public onlyRole(chair){
+    function expansion(uint amount) external onlyRole(chair){
         dolaSupply += amount;
         dola.mint(address(this), amount);
         metapoolDeposit(amount, maxLossExpansionBps);
@@ -165,7 +156,7 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     * @param amountDola The amount of dola tokens to withdraw. Note that more tokens may
     be withdrawn than requested.
     */
-    function contraction(uint amountDola) public onlyRole(chair){
+    function contraction(uint amountDola) external onlyRole(chair){
         //Calculate how many lp tokens are needed to withdraw the dola
         uint crvLpNeeded = lpForDola(amountDola);
         require(crvLpNeeded <= crvLpSupply(), "Not enough crvLP tokens");
@@ -184,7 +175,7 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     * @notice Withdraws every remaining crvLP token. Can take up to maxLossWithdrawBps in loss, compared to dolaSupply.
     * It will still be necessary to call takeProfit to withdraw any potential rewards.
     */
-    function contractAll() public onlyRole(chair){
+    function contractAll() external onlyRole(chair){
         baseRewardPool.withdrawAllAndUnwrap(false);
         uint dolaMinOut = dolaSupply * (10_000 - maxLossWithdrawBps) / 10_000;
         crvMetapool.remove_liquidity_one_coin(crvLpSupply(), 0, dolaMinOut);
@@ -196,13 +187,13 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     /**
     * @notice Withdraws the profit generated by convex staking to governance
     */
-    function takeProfit() public {
+    function claimRewards() public {
         require(baseRewardPool.getReward());
         crv.transfer(gov, crv.balanceOf(address(this)));
         cvx.transfer(gov, cvx.balanceOf(address(this)));
     }
 
-    function claimOther(address otherReward) public {
+    function claimOther(address otherReward) external {
         require(otherReward != address(dola), "Cant claim dola");
         require(otherReward != address(crvMetapool), "Cant claim crv LP tokens");
         IERC20(otherReward).transfer(gov, IERC20(otherReward).balanceOf(address(this)));
@@ -212,7 +203,7 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     * @notice Burns amount of dola supply with a maximum of the entire dola supply.
     * @param amount Amount of dola supply to be burnt.
     */
-    function burnDolaSupply(uint amount) public {
+    function burnDolaSupply(uint amount) external {
         if(amount > dolaSupply){
             dola.transferFrom(msg.sender, address(this), dolaSupply);
         } else {
@@ -240,11 +231,11 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     /**
     * @notice Withdraws all owned curve LP tokens to governance.
     * @dev Only to be used in emergency situations and with full consent of governance.
-    * @param claimRewards Claim convex staking rewards if true, otherwise withdraw without claiming.
+    * @param claim Claim convex staking rewards if true, otherwise withdraw without claiming.
     */
-    function emergencyWithdraw(bool claimRewards) external onlyRole(gov) {
-        if(claimRewards){
-            takeProfit();
+    function emergencyWithdraw(bool claim) external onlyRole(gov) {
+        if(claim){
+            claimRewards();
         }
         baseRewardPool.withdrawAllAndUnwrap(false);
         crvMetapool.transfer(gov, crvMetapool.balanceOf(address(this)));

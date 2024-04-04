@@ -33,7 +33,6 @@ contract ConvexFedV2Test is DSTest {
     uint public maxLossLimitGuardian = 1000;
     uint public maxLossExpansionBps = 100;
     uint public maxLossWithdrawBps = 100;
-    uint public maxLossTakeProfitBps = 100;
 
     function setUp() public {
         convexFed = new ConvexFedV2(
@@ -47,7 +46,6 @@ contract ConvexFedV2Test is DSTest {
             guardian,
             maxLossExpansionBps,
             maxLossWithdrawBps,
-            maxLossTakeProfitBps,
             maxLossLimitGuardian
         );
         vm.startPrank(gov);
@@ -194,14 +192,14 @@ contract ConvexFedV2Test is DSTest {
         vm.stopPrank();
     }
 
-    function testTakeProfit_NoProfit() public {
+    function testClaimRewards_NoProfit() public {
         vm.startPrank(chair);
         convexFed.expansion(100_000 ether);
         uint initialCvx = cvx.balanceOf(gov);
         uint initialCvxCrv = crv.balanceOf(gov);
         uint initialCrvLpSupply = convexFed.crvLpSupply();
         uint initialGovDola = dola.balanceOf(gov);
-        convexFed.takeProfit();
+        convexFed.claimRewards();
         vm.stopPrank();
 
         assertEq(cvx.balanceOf(gov), initialCvx, "treasury cvx balance didn't increase");
@@ -210,7 +208,7 @@ contract ConvexFedV2Test is DSTest {
         assertEq(dola.balanceOf(gov), initialGovDola);
     }
 
-    function testTakeProfit_IncreaseGovCrvCvxBalance() public {
+    function testClaimRewards_IncreaseGovCrvCvxBalance() public {
         vm.startPrank(chair);
         convexFed.expansion(100_000 ether);
         uint initialCvx = cvx.balanceOf(gov);
@@ -219,7 +217,7 @@ contract ConvexFedV2Test is DSTest {
         uint initialGovDola = dola.balanceOf(gov);
         //Pass time
         vm.warp(baseRewardPool.periodFinish() + 1 + 30 days);
-        convexFed.takeProfit();
+        convexFed.claimRewards();
         vm.stopPrank();
 
         assertEq(cvx.balanceOf(address(convexFed)), 0, "Fed should hold no cvx");
@@ -256,16 +254,6 @@ contract ConvexFedV2Test is DSTest {
         assertTrue(initial != convexFed.maxLossWithdrawBps());
     }
 
-    function testSetMaxLossTakeProfitBps_succeed_whenCalledByGov() public {
-        uint initial = convexFed.maxLossTakeProfitBps();
-        
-        vm.prank(gov);
-        convexFed.setMaxLossTakeProfitBps(1);
-
-        assertEq(convexFed.maxLossTakeProfitBps(), 1);
-        assertTrue(initial != convexFed.maxLossTakeProfitBps());
-    }
-
     function testSetMaxLossExpansionBps_fail_whenCalledByNonGov() public {
         uint initial = convexFed.maxLossExpansionBps();
         
@@ -275,7 +263,7 @@ contract ConvexFedV2Test is DSTest {
         assertEq(convexFed.maxLossExpansionBps(), initial);
     }
 
-    function testSetMaxLossWithdrawBps_fail_whenCalledByGov() public {
+    function testSetMaxLossWithdrawBps_fail_whenCalledByNonGov() public {
         uint initial = convexFed.maxLossWithdrawBps();
         
         vm.expectRevert("Unauthorized");
@@ -284,16 +272,7 @@ contract ConvexFedV2Test is DSTest {
         assertEq(convexFed.maxLossWithdrawBps(), initial);
     }
 
-    function testSetMaxLossTakeProfitBps_fail_whenCalledByGov() public {
-        uint initial = convexFed.maxLossTakeProfitBps();
-        
-        vm.expectRevert("Unauthorized");
-        convexFed.setMaxLossTakeProfitBps(1);
-
-        assertEq(convexFed.maxLossTakeProfitBps(), initial);
-    }
-
-    function testSetGuardianMaxLossBpsLimit_fail_whenCalledByGov() public {
+    function testSetGuardianMaxLossBpsLimit_fail_whenCalledByNonGov() public {
         uint initial = convexFed.guardianMaxLossBpsLimit();
         
         vm.expectRevert("Unauthorized");
