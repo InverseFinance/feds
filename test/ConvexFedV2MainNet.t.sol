@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.11;
 
-import "ds-test/test.sol";
-import "forge-std/Vm.sol";
+import "forge-std/Test.sol";
 import "src/convex-fed/ConvexFedV2.sol";
 import "src/interfaces/curve/IMetaPool.sol";
 import "src/interfaces/curve/IZapDepositor3pool.sol";
@@ -16,8 +15,8 @@ interface IMinted is IERC20 {
     function mint(address to, uint amount) external;
 }
 
-contract ConvexFedV2Test is DSTest {
-    Vm internal constant vm = Vm(HEVM_ADDRESS);
+contract ConvexFedV2Test is Test {
+    //Vm internal constant vm = Vm(HEVM_ADDRESS);
     IConvexBooster public convexBooster = IConvexBooster(0xF403C135812408BFbE8713b5A23a04b3D48AAE31);
     IConvexBaseRewardPool public baseRewardPool = IConvexBaseRewardPool(0x0404d05F3992347d2f0dC3a97bdd147D77C85c1c);
     IMetaPool public crvPool = IMetaPool(0xE57180685E3348589E9521aa53Af0BCD497E884d);
@@ -25,6 +24,7 @@ contract ConvexFedV2Test is DSTest {
     IMinted public dola = IMinted(0x865377367054516e17014CcdED1e7d814EDC9ce4);
     IERC20 public crv = IERC20(0xD533a949740bb3306d119CC777fa900bA034cd52);
     IERC20 public cvx = IERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
+    IERC20 public usdc = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     IERC20 public fraxBP = IERC20(0x3175Df0976dFA876431C2E9eE6Bc45b65d3473CC);
     address public gov = 0x926dF14a23BE491164dCF93f4c468A50ef659D5B;
     address public chair = address(0xB);
@@ -72,17 +72,34 @@ contract ConvexFedV2Test is DSTest {
 
         assertEq(initialDolaTotalSupply + amount, dola.totalSupply());
         assertEq(initialDolaSupply + amount, convexFed.dolaSupply());
-        //TODO: Should have greater precision about the amount of crvLP acquired
         assertGt(convexFed.crvLpSupply(), initialCrvLpSupply);
         assertGe(convexFed.crvLpSupply()-initialCrvLpSupply, amount * 10**18 / crvPool.get_virtual_price() * (10_000 - maxLossExpansionBps) / 10_000);
     }
 
     function testFailExpansion_fail_whenExpandedOutsideAcceptableSlippage() public {
-        uint amount = 1000_000_000 ether;
+        uint amount = 1_000_000_000 ether;
 
         vm.prank(chair);
         convexFed.expansion(amount);
     }
+
+    function testBurnDolaSupply() public {
+        uint amount = 1_000_000 ether;
+
+        vm.prank(chair);
+        convexFed.expansion(amount);
+
+        vm.prank(gov);
+        dola.mint(address(this), amount);
+        dola.approve(address(convexFed), amount);
+        
+        uint dolaSupply = convexFed.dolaSupply();
+        convexFed.burnDolaSupply(1);
+        assertEq(convexFed.dolaSupply(), dolaSupply - 1);
+        convexFed.burnDolaSupply(amount);
+        assertEq(convexFed.dolaSupply(), 0);
+    }
+
 
     function testContraction_succeed_whenContractedWithinAcceptableSlippage(uint amount) public {
         vm.assume(amount < 500_000 * 10**18);
@@ -234,6 +251,25 @@ contract ConvexFedV2Test is DSTest {
         convexFed.contraction(1000);
     }
 
+    function testClaimOther() public {
+        uint govUsdc = usdc.balanceOf(gov);
+        uint mintAmount = 1_000 ether;
+        deal(address(usdc), address(convexFed), mintAmount);
+        convexFed.claimOther(address(usdc));
+        assertEq(usdc.balanceOf(gov), govUsdc + mintAmount);
+    }
+
+    function testEmergencyWithdrawn() public {
+        vm.prank(chair);
+        uint amount = 1_000_000 ether;
+        convexFed.expansion(amount);
+        uint lpAmount = convexFed.crvLpSupply();
+        vm.prank(gov);
+        convexFed.emergencyWithdraw(false);
+        assertEq(convexFed.crvLpSupply(), 0, "Fed still has LP tokens");
+        assertEq(crvPool.balanceOf(gov), lpAmount, "Gov didn't receive correct amount of LP tokens");
+    }
+
     function testSetMaxLossExpansionBps_succeed_whenCalledByGov() public {
         uint initial = convexFed.maxLossExpansionBps();
         
@@ -253,6 +289,21 @@ contract ConvexFedV2Test is DSTest {
         assertEq(convexFed.maxLossWithdrawBps(), 1);
         assertTrue(initial != convexFed.maxLossWithdrawBps());
     }
+
+    function testSetMaxLossWithdrawBps_succeed_whenCalledByGuardian() public {
+        uint initial = convexFed.maxLossWithdrawBps();
+        
+        vm.startPrank(guardian);
+        uint guardianLimit = convexFed.guardianMaxLossBpsLimit();
+        vm.expectRevert("Max loss > guardian limit");
+        convexFed.setMaxLossWithdrawBps(guardianLimit + 1);
+        
+        convexFed.setMaxLossWithdrawBps(1);
+
+        assertEq(convexFed.maxLossWithdrawBps(), 1);
+        assertTrue(initial != convexFed.maxLossWithdrawBps());
+    }
+
 
     function testSetMaxLossExpansionBps_fail_whenCalledByNonGov() public {
         uint initial = convexFed.maxLossExpansionBps();
@@ -279,6 +330,44 @@ contract ConvexFedV2Test is DSTest {
         convexFed.setGuardianMaxLossBpsLimit(1);
 
         assertEq(convexFed.guardianMaxLossBpsLimit(), initial);
+    }
+
+    function testSetChair() public {
+        vm.expectRevert("Unauthorized");
+        convexFed.setChair(address(this));
+
+        assertEq(convexFed.chair(), chair);
+        vm.prank(gov);
+        convexFed.setChair(address(this));
+        assertEq(convexFed.chair(), address(this));
+        convexFed.resign();
+        assertEq(convexFed.chair(), address(0));
+    }
+
+    function testSetGuardian() public {
+        vm.expectRevert("Unauthorized");
+        convexFed.setGuardian(address(this));
+
+        assertEq(convexFed.guardian(), guardian);
+        vm.prank(gov);
+        convexFed.setGuardian(address(this));
+        assertEq(convexFed.guardian(), address(this));
+    }
+
+    function testSetGov() public {
+        vm.expectRevert("Unauthorized");
+        convexFed.claimGov();
+        vm.expectRevert("Unauthorized");
+        convexFed.setPendingGov(address(this));
+
+        assertEq(address(0), convexFed.pendingGov());
+        vm.prank(gov);
+        convexFed.setPendingGov(address(this));
+        assertEq(address(this), convexFed.pendingGov());
+        
+        convexFed.claimGov();
+        assertEq(address(0), convexFed.pendingGov());
+        assertEq(address(this), convexFed.gov());
     }
 
     function washTrade(uint amount, uint times) public{

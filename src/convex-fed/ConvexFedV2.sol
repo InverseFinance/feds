@@ -85,14 +85,14 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     * @notice Method for gov to change the chair
     * @param _newChair Address of the new chair
     */
-    function changeChair(address _newChair) external onlyRole(gov){
+    function setChair(address _newChair) external onlyRole(gov){
         chair = _newChair;
     }
     /**
     * @notice Method for gov to change the guardian
     * @param _newGuardian Address of the new guardian
     */
-    function changeGuardian(address _newGuardian) external onlyRole(gov){
+    function setGuardian(address _newGuardian) external onlyRole(gov){
         guardian = _newGuardian;
     }
 
