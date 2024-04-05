@@ -18,6 +18,7 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     address public pendingGov;
     address public guardian;
     uint public dolaSupply;
+    uint public supplyCeiling = type(uint).max;
     uint public maxLossExpansionBps;
     uint public maxLossWithdrawBps;
     uint public guardianMaxLossBpsLimit;
@@ -132,12 +133,21 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
         require(newGuardianMaxLossBpsLimit <= 10000, "Max loss > 100%");
         guardianMaxLossBpsLimit = newGuardianMaxLossBpsLimit;   
     }
+    
+    /**
+    * @notice Set limit of the supply ceiling
+    * @param newSupplyCeiling The new dola supply ceiling of the fed
+    */ 
+    function setSupplyCeiling(uint newSupplyCeiling) external onlyRole(gov) {
+        supplyCeiling = newSupplyCeiling;
+    }
 
     /**
     * @notice Deposits amount of dola tokens into convex
     * @param amount Amount of dola token to deposit into yEarn vault
     */
     function expansion(uint amount) external onlyRole(chair){
+        require(amount + dolaSupply <= supplyCeiling, "Expansion above ceiling");
         dolaSupply += amount;
         dola.mint(address(this), amount);
         metapoolDeposit(amount, maxLossExpansionBps);

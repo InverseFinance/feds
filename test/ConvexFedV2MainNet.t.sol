@@ -83,6 +83,19 @@ contract ConvexFedV2Test is Test {
         convexFed.expansion(amount);
     }
 
+    function testFailExpansion_fail_whenExpandingAboveSupplyCeiling() public {
+        uint ceiling = 1_000_000 ether;
+        vm.prank(gov);
+        convexFed.setSupplyCeiling(ceiling);
+
+        vm.prank(chair);
+        vm.expectRevert("Expansion above ceiling");
+        convexFed.expansion(ceiling+1);
+        convexFed.expansion(ceiling/2);
+        vm.expectRevert("Expansion above ceiling");
+        convexFed.expansion(ceiling/2+2);
+    }
+
     function testBurnDolaSupply() public {
         uint amount = 1_000_000 ether;
 
