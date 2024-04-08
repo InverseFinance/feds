@@ -203,7 +203,7 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
         cvx.transfer(gov, cvx.balanceOf(address(this)));
     }
 
-    function claimOther(address otherReward) external {
+    function claimOther(address otherReward) external onlyRole(chair){
         require(otherReward != address(dola), "Cant claim dola");
         require(otherReward != address(crvMetapool), "Cant claim crv LP tokens");
         IERC20(otherReward).transfer(gov, IERC20(otherReward).balanceOf(address(this)));

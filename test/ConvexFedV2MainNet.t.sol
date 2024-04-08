@@ -268,6 +268,7 @@ contract ConvexFedV2Test is Test {
         uint govUsdc = usdc.balanceOf(gov);
         uint mintAmount = 1_000 ether;
         deal(address(usdc), address(convexFed), mintAmount);
+        vm.prank(chair);
         convexFed.claimOther(address(usdc));
         assertEq(usdc.balanceOf(gov), govUsdc + mintAmount);
     }
