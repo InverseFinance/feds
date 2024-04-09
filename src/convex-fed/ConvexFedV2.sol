@@ -25,6 +25,7 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
 
     event Expansion(uint amount);
     event Contraction(uint amount);
+    event ClaimRewards(uint amount, address token);
 
     constructor(
             address _crv,
@@ -199,14 +200,20 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     */
     function claimRewards() public {
         require(baseRewardPool.getReward());
-        crv.transfer(gov, crv.balanceOf(address(this)));
-        cvx.transfer(gov, cvx.balanceOf(address(this)));
+        uint crvBalance = crv.balanceOf(address(this));
+        uint cvxBalance = cvx.balanceOf(address(this));
+        crv.transfer(gov, crvBalance);
+        cvx.transfer(gov, cvxBalance);
+        emit ClaimRewards(cvxBalance, address(cvx));
+        emit ClaimRewards(crvBalance, address(crv));
     }
 
     function claimOther(address otherReward) external onlyRole(chair){
         require(otherReward != address(dola), "Cant claim dola");
         require(otherReward != address(crvMetapool), "Cant claim crv LP tokens");
-        IERC20(otherReward).transfer(gov, IERC20(otherReward).balanceOf(address(this)));
+        uint rewardBalance = IERC20(otherReward).balanceOf(address(this));
+        IERC20(otherReward).transfer(gov, rewardBalance);
+        emit ClaimRewards(rewardBalance, otherReward);
     }
 
     /**
@@ -228,7 +235,8 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
     function _burnAndPay() internal returns(uint burnAmount){
         uint dolaBal = dola.balanceOf(address(this));
         if(dolaBal > dolaSupply){
-            IERC20(dola).transfer(gov, dolaBal - dolaSupply);
+            uint profit = dolaBal - dolaSupply;
+            IERC20(dola).transfer(gov, profit);
             burnAmount = dolaSupply;
             dolaSupply = 0;
         } else {
