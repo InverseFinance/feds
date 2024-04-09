@@ -144,7 +144,7 @@ contract ConvexFedV2 is CurvePoolAdapterV2{
 
     /**
     * @notice Deposits amount of dola tokens into convex
-    * @param amount Amount of dola token to deposit into yEarn vault
+    * @param amount Amount of dola token to deposit into convex
     */
     function expansion(uint amount) external onlyRole(chair){
         require(amount + dolaSupply <= supplyCeiling, "Expansion above ceiling");
