@@ -6,10 +6,10 @@ import "forge-std/Test.sol";
 import { IERC20 } from "../interfaces/IERC20.sol";
 import { IDola } from "../interfaces/velo/IDola.sol";
 import {VeloFarmer} from "../velo-fed/VeloFarmer.sol";
-import {OptiFed} from "../velo-fed/OptiFed.sol";
+import {OptiFedCCTP} from "../velo-fed/OptiFedCCTP.sol";
 import "../interfaces/velo/ICurvePool.sol";
 
-contract OptiFedMainnetTest is Test {
+contract OptiFedCCTPMainnetTest is Test {
     //Tokens
     IDola public DOLA = IDola(0x865377367054516e17014CcdED1e7d814EDC9ce4);
     IERC20 public USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
@@ -32,18 +32,19 @@ contract OptiFedMainnetTest is Test {
     uint usdcAmount = 1_000_00e6;
 
     //Feds
-    OptiFed fed;
+    OptiFedCCTP fed;
 
     error OnlyGov();
     error OnlyChair();
     error DeltaAboveMax();
     
     function setUp() public {
-        vm.warp(block.timestamp + 1 days);
+        vm.createSelectFork(vm.rpcUrl("mainnet"), 19512248);
+        //vm.warp(block.timestamp + 1 days);
         
         vm.startPrank(chair);
 
-        fed = new OptiFed(gov, chair, address(0x69), 25, 10);
+        fed = new OptiFedCCTP(gov, chair, address(0x69), 25, 10);
 
         vm.stopPrank();
         vm.startPrank(gov);
@@ -63,20 +64,36 @@ contract OptiFedMainnetTest is Test {
         assertEq(prevBal + dolaAmount, DOLA.balanceOf(l1optiBridgeAddress));
     }
 
-    function testL1_OptiFedExpansionAndSwap_Half() public {
+    function testL1_OptiFedExpansionAndSwap_Half_CCTP() public {
+        vm.startPrank(chair);
+
+        uint prevDolaBal = DOLA.balanceOf(l1optiBridgeAddress);
+     
+        fed.expansionAndSwap(dolaAmount, dolaAmount / 2, true);
+
+        assertEq(prevDolaBal + dolaAmount / 2, DOLA.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of DOLA");
+        assertEq(USDC.balanceOf(address(fed)),0, "CCTP Burn Failed");
+    }
+
+    
+
+    function testL1_OptiFedExpansionAndSwap_Half_NO_CCTP() public {
         vm.startPrank(chair);
 
         uint prevDolaBal = DOLA.balanceOf(l1optiBridgeAddress);
         uint prevUsdcBal = USDC.balanceOf(l1optiBridgeAddress);
 
-        fed.expansionAndSwap(dolaAmount, dolaAmount / 2);
+        fed.expansionAndSwap(dolaAmount, dolaAmount / 2, false);
 
         uint estimatedUsdcAmount = dolaAmount / 2 / 1e12;
 
         assertEq(prevDolaBal + dolaAmount / 2, DOLA.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of DOLA");
+        
         assertGt(prevUsdcBal + estimatedUsdcAmount * 1001 / 1000, USDC.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of USDC");
         assertLt(prevUsdcBal + estimatedUsdcAmount, USDC.balanceOf(l1optiBridgeAddress) * 1001/1000, "Bridge didn't receive correct amount of USDC");
     }
+
+    
 
     function testL1_OptiFedExpansionAndSwap(uint8 multi) public {
         uint256 multiplier = bound(uint(multi), 1, 10);
@@ -88,13 +105,30 @@ contract OptiFedMainnetTest is Test {
         uint prevDolaBal = DOLA.balanceOf(l1optiBridgeAddress);
         uint prevUsdcBal = USDC.balanceOf(l1optiBridgeAddress);
 
-        fed.expansionAndSwap(dolaAmount, dolaToSwap);
+        fed.expansionAndSwap(dolaAmount, dolaToSwap, false);
 
         uint estimatedUsdcAmount = dolaToSwap / 1e12;
 
         assertEq(prevDolaBal + dolaToBridge, DOLA.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of DOLA");
+
         assertGt(prevUsdcBal + estimatedUsdcAmount * 1001 / 1000, USDC.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of USDC");
         assertLt(prevUsdcBal + estimatedUsdcAmount, USDC.balanceOf(l1optiBridgeAddress) * 1001/1000, "Bridge didn't receive correct amount of USDC");
+    }
+
+    function testL1_OptiFedExpansionAndSwap_CCTP(uint8 multi) public {
+        uint256 multiplier = bound(uint(multi), 1, 10);
+        uint dolaToSwap = dolaAmount * multiplier / 10;
+        uint dolaToBridge = dolaAmount - dolaToSwap;
+
+        vm.startPrank(chair);
+
+        uint prevDolaBal = DOLA.balanceOf(l1optiBridgeAddress);
+
+        fed.expansionAndSwap(dolaAmount, dolaToSwap, true);
+
+        assertEq(prevDolaBal + dolaToBridge, DOLA.balanceOf(l1optiBridgeAddress), "Bridge didn't receive correct amount of DOLA");
+        assertEq(USDC.balanceOf(address(fed)),0, "CCTP Burn Failed");
+
     }
 
     function testL1_OptiFedExpansionAndSwap_Fails_IfSlippageRestraintUnmet() public {
@@ -107,7 +141,7 @@ contract OptiFedMainnetTest is Test {
 
         vm.startPrank(chair);
         vm.expectRevert();
-        fed.expansionAndSwap(dolaAmount, dolaAmount / 2);
+        fed.expansionAndSwap(dolaAmount, dolaAmount / 2, true);
     }
 
     function testL1_OptiFedSwapDOLAtoUSDC() public {
