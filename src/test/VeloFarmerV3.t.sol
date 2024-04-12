@@ -50,8 +50,7 @@ contract VeloFarmerV3Test is Test {
     //Feds
     VeloFarmerV3 fed;
 
-    error OnlyGov();
-    error OnlyChair();
+    error OnlyRole(address l1, address l2);
     error OnlyGovOrGuardian();
     error PercentOutOfRange();
     error LiquiditySlippageTooHigh();
@@ -135,7 +134,7 @@ contract VeloFarmerV3Test is Test {
         vm.warp(block.timestamp + (10_0000 * 60));
         fed.claimVeloRewards();
 
-        assertEq(fed.LP_TOKEN_NATIVE().balanceOf(address(fed)),0);
+        assertEq(fed.LP_TOKEN().balanceOf(address(fed)),0);
         assertGt(VELO.balanceOf(address(treasury)), initialVelo, "No rewards claimed");
     }
 
@@ -157,7 +156,7 @@ contract VeloFarmerV3Test is Test {
         vm.warp(block.timestamp + (10_0000 * 60));
         fed.claimVeloRewards();
 
-        assertEq(fed.LP_TOKEN_NATIVE().balanceOf(address(fed)),0);
+        assertEq(fed.LP_TOKEN().balanceOf(address(fed)),0);
         assertGt(VELO.balanceOf(address(treasury)), initialVelo, "No rewards claimed");
     }
 
@@ -445,7 +444,7 @@ contract VeloFarmerV3Test is Test {
 
     function testL2_onlyChair_fail_whenCalledByBridge_NonChairSender() public {
 
-        address prevChair = fed.chair();
+        address prevChair = fed.l1Chair();
 
         vm.startPrank(address(l2CrossDomainMessenger));
         mockXDomainMessageSender(address(0x999));
@@ -453,37 +452,39 @@ contract VeloFarmerV3Test is Test {
         fed.resign();
         vm.stopPrank();
 
-        assertEq(prevChair, fed.chair(), "onlyChair function did not revert properly");
-        assertTrue(fed.chair() != address(0), "onlyChair function did not revert properly");
+        assertEq(prevChair, fed.l1Chair(), "onlyChair function did not revert properly");
+        assertTrue(fed.l1Chair() != address(0), "onlyChair function did not revert properly");
     }
 
     function testL2_resign_fromChair() public {
 
-        address prevChair = fed.chair();
+        address prevChair = fed.l1Chair();
 
         vm.startPrank(address(l2CrossDomainMessenger));
         mockXDomainMessageSender(chair);
         fed.resign();
         vm.stopPrank();
 
-        assertTrue(prevChair != fed.chair(), "onlyChair function did not revert properly");
-        assertEq(fed.chair(), address(0), "onlyChair function did not revert properly");
+        assertTrue(prevChair != fed.l1Chair(), "onlyChair function did not revert properly");
+        assertEq(fed.l1Chair(), address(0), "onlyChair function did not revert properly");
     }
 
     function testL2_resign_fromL2Chair() public {
         vm.startPrank(l2chair);
 
-        address prevChair = fed.l2chair();
+        address prevChair = fed.l2Chair();
         fed.resign();
 
-        assertTrue(prevChair != fed.l2chair(), "onlyChair function did not revert properly");
-        assertEq(fed.l2chair(), address(0), "onlyChair function did not revert properly");
+        assertTrue(prevChair != fed.l2Chair(), "onlyChair function did not revert properly");
+        assertEq(fed.l2Chair(), address(0), "onlyChair function did not revert properly");
     }
 
     function testL2_resign_fail_whenCalledByNonChair() public {
         vm.startPrank(user);
 
-        vm.expectRevert(OnlyChair.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(OnlyRole.selector, fed.l1Chair(), fed.l2Chair())
+        );
         fed.resign();
     }
 
@@ -511,7 +512,9 @@ contract VeloFarmerV3Test is Test {
     function testL2_setPendingGov_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
 
-        vm.expectRevert(OnlyGov.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(OnlyRole.selector, fed.gov(), address(0))
+        );
         fed.setPendingGov(user);
     }
 
@@ -530,17 +533,21 @@ contract VeloFarmerV3Test is Test {
         assertEq(fed.pendingGov(), address(0), "pendingGov failed to be set as 0 address");
     }
     
-    function testL2_changeChair_fail_whenCalledByNonGov() public {
+    function testL2_changeL1Chair_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
 
-        vm.expectRevert(OnlyGov.selector);
-        fed.changeChair(user);
+        vm.expectRevert(
+            abi.encodeWithSelector(OnlyRole.selector, fed.gov(), address(0))
+        );
+        fed.changeL1Chair(user);
     }
 
     function testL2_changeOptiFed_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
 
-        vm.expectRevert(OnlyGov.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(OnlyRole.selector, fed.gov(), address(0))
+        );
         fed.changeOptiFed(user);
     }
 
