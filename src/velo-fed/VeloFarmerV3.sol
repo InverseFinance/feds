@@ -291,7 +291,7 @@ contract VeloFarmerV3 {
     address public gov;
     address public treasury;
     address public guardian;
-    address public l1Treasury;
+    address public immutable l1Treasury;
 
     uint public maxSlippageBpsDolaToUsdc;
     uint public maxSlippageBpsUsdcToDola;
