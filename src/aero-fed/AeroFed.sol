@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
-import "src/interfaces/IERC20.sol";
-import "src/interfaces/velo/IGauge.sol";
+pragma solidity ^0.8.13;
 import "src/interfaces/velo/IRouter.sol";
+import "src/interfaces/IERC20.sol";
 import "src/interfaces/opti/IL2ERC20Bridge.sol";
 import "src/interfaces/opti/ICrossDomainMessenger.sol";
+import "src/interfaces/velo/IGauge.sol";
 
-pragma solidity ^0.8.13;
-
-contract VeloFarmerV2 {
+contract AeroFed {
     address public chair;
     address public l2chair;
     address public pendingGov;
@@ -21,16 +20,16 @@ contract VeloFarmerV2 {
     uint public constant DOLA_USDC_CONVERSION_MULTI= 1e12;
     uint public constant PRECISION = 10_000;
 
-    IGauge public constant dolaGauge = IGauge(0xa1034Ed2C9eb616d6F7f318614316e64682e7923);
-    IERC20 public constant LP_TOKEN = IERC20(0xB720FBC32d60BB6dcc955Be86b98D8fD3c4bA645);
-    address public constant veloTokenAddr = 0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db;
-    address public constant factory = 0xF1046053aa5682b4F9a81b5481394DA16BE5FF5a;
+    IGauge public constant dolaGauge = IGauge(0xeAE066C25106006fB386A3a8b1698A0cB6931c1a);
+    IERC20 public constant LP_TOKEN = IERC20(0x0B25c51637c43decd6CC1C1e3da4518D54ddb528);
+    IERC20 public constant AERO = IERC20(0x940181a94A35A4569E4529A3CDfB74e38FD98631);
+    address public constant factory = 0x420DD381b31aEf6683db6B902084cB0FFECe40Da;
     ICrossDomainMessenger public constant ovmL2CrossDomainMessenger = ICrossDomainMessenger(0x4200000000000000000000000000000000000007);
-    IRouter public constant router = IRouter(0xa062aE8A9c5e11aaA026fc2670B0D65cCc8B2858);
-    IERC20 public constant DOLA = IERC20(0x8aE125E8653821E851F12A49F7765db9a9ce7384);
-    IERC20 public constant USDC = IERC20(0x7F5c764cBc14f9669B88837ca1490cCa17c31607);
-    IL2ERC20Bridge public bridge;
-    address public optiFed;
+    IRouter public constant router = IRouter(0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43);
+    IERC20 public constant DOLA = IERC20(0x4621b7A9c75199271F773Ebd9A499dbd165c3191);
+    IERC20 public constant USDC = IERC20(0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA);
+    IL2ERC20Bridge public constant bridge = IL2ERC20Bridge(0x4200000000000000000000000000000000000010);
+    address public baseFed;
 
     error OnlyChair();
     error OnlyGov();
@@ -46,8 +45,7 @@ contract VeloFarmerV2 {
         address l2chair_,
         address treasury_,
         address guardian_,
-        address bridge_,
-        address optiFed_,
+        address baseFed_,
         uint maxSlippageBpsDolaToUsdc_,
         uint maxSlippageBpsUsdcToDola_,
         uint maxSlippageBpsLiquidity_
@@ -58,8 +56,7 @@ contract VeloFarmerV2 {
         l2chair = l2chair_;
         treasury = treasury_;
         guardian = guardian_;
-        bridge = IL2ERC20Bridge(bridge_);
-        optiFed = optiFed_;
+        baseFed = baseFed_;
         maxSlippageBpsDolaToUsdc = maxSlippageBpsDolaToUsdc_;
         maxSlippageBpsUsdcToDola = maxSlippageBpsUsdcToDola_;
         maxSlippageBpsLiquidity = maxSlippageBpsLiquidity_;
@@ -98,16 +95,16 @@ contract VeloFarmerV2 {
     /**
      * @notice Claims all VELO token rewards accrued by this contract & transfer all VELO owned by this contract to `treasury`
      */
-    function claimVeloRewards() external {
+    function claimAeroRewards() external {
         dolaGauge.getReward(address(this));
 
-        IERC20(veloTokenAddr).transfer(treasury, IERC20(veloTokenAddr).balanceOf(address(this)));
+        AERO.transfer(treasury, AERO.balanceOf(address(this)));
     }
 
     /**
-     * @notice Attempts to deposit `dolaAmount` of DOLA & `usdcAmount` of USDC into Velodrome DOLA/USDC stable pool. Then, deposits LP tokens into gauge.
-     * @param dolaAmount Amount of DOLA to be added as liquidity in Velodrome DOLA/USDC pool
-     * @param usdcAmount Amount of USDC to be added as liquidity in Velodrome DOLA/USDC pool
+     * @notice Attempts to deposit `dolaAmount` of DOLA & `usdcAmount` of USDC into Aerodrome DOLA/USDC stable pool. Then, deposits LP tokens into gauge.
+     * @param dolaAmount Amount of DOLA to be added as liquidity in Aerodrome DOLA/USDC pool
+     * @param usdcAmount Amount of USDC to be added as liquidity in Aerodrome DOLA/USDC pool
      */
     function deposit(uint dolaAmount, uint usdcAmount) public onlyChair {
         uint lpTokenPrice = getLpTokenPrice();
@@ -170,26 +167,26 @@ contract VeloFarmerV2 {
     }
 
     /**
-     * @notice Withdraws `dolaAmount` of DOLA to optiFed on L1. Will take 7 days before withdraw is claimable on L1.
-     * @param dolaAmount Amount of DOLA to withdraw and send to L1 OptiFed
+     * @notice Withdraws `dolaAmount` of DOLA to baseFed on L1. Will take 7 days before withdraw is claimable on L1.
+     * @param dolaAmount Amount of DOLA to withdraw and send to L1 BaseFed
      */
-    function withdrawToL1OptiFed(uint dolaAmount) external onlyChair {
+    function withdrawToL1BaseFed(uint dolaAmount) external onlyChair {
         if (dolaAmount > DOLA.balanceOf(address(this))) revert NotEnoughTokens();
 
-        bridge.withdrawTo(address(DOLA), optiFed, dolaAmount, 0, "");
+        bridge.withdrawTo(address(DOLA), baseFed, dolaAmount, 0, "");
     }
 
     /**
-     * @notice Withdraws `dolaAmount` of DOLA & `usdcAmount` of USDC to optiFed on L1. Will take 7 days before withdraw is claimable on L1.
-     * @param dolaAmount Amount of DOLA to withdraw and send to L1 OptiFed
-     * @param usdcAmount Amount of USDC to withdraw and send to L1 OptiFed
+     * @notice Withdraws `dolaAmount` of DOLA & `usdcAmount` of USDC to baseFed on L1. Will take 7 days before withdraw is claimable on L1.
+     * @param dolaAmount Amount of DOLA to withdraw and send to L1 BaseFed
+     * @param usdcAmount Amount of USDC to withdraw and send to L1 BaseFed
      */
-    function withdrawToL1OptiFed(uint dolaAmount, uint usdcAmount) external onlyChair {
+    function withdrawToL1BaseFed(uint dolaAmount, uint usdcAmount) external onlyChair {
         if (dolaAmount > DOLA.balanceOf(address(this))) revert NotEnoughTokens();
         if (usdcAmount > USDC.balanceOf(address(this))) revert NotEnoughTokens();
 
-        bridge.withdrawTo(address(DOLA), optiFed, dolaAmount, 0, "");
-        bridge.withdrawTo(address(USDC), optiFed, usdcAmount, 0, "");
+        bridge.withdrawTo(address(DOLA), baseFed, dolaAmount, 0, "");
+        bridge.withdrawTo(address(USDC), baseFed, usdcAmount, 0, "");
     }
 
     /**
@@ -198,7 +195,7 @@ contract VeloFarmerV2 {
      * @param to L1 Address that tokens will be sent to
      * @param amount Amount of the L2 token to be withdrawn
      */
-    function withdrawTokensToL1(address l2Token, address to, uint amount) external onlyChair {
+    function withdrawTokensToL1(address l2Token, address to, uint amount) external onlyGov {
         if (amount > IERC20(l2Token).balanceOf(address(this))) revert NotEnoughTokens();
 
         IERC20(l2Token).approve(address(bridge), amount);
@@ -206,7 +203,7 @@ contract VeloFarmerV2 {
     }
 
     /**
-     * @notice Swap `usdcAmount` of USDC to DOLA through velodrome.
+     * @notice Swap `usdcAmount` of USDC to DOLA through aerodrome.
      * @param usdcAmount Amount of USDC to swap to DOLA
      */
     function swapUSDCtoDOLA(uint usdcAmount) public onlyChair {
@@ -217,7 +214,7 @@ contract VeloFarmerV2 {
     }
 
     /**
-     * @notice Swap `dolaAmount` of DOLA to USDC through velodrome.
+     * @notice Swap `dolaAmount` of DOLA to USDC through aerodrome.
      * @param dolaAmount Amount of DOLA to swap to USDC
      */
     function swapDOLAtoUSDC(uint dolaAmount) public onlyChair { 
@@ -228,7 +225,7 @@ contract VeloFarmerV2 {
     }
 
     /**
-     * @notice Calculates approximate price of 1 Velodrome DOLA/USDC stable pool LP token
+     * @notice Calculates approximate price of 1 Aerodrome DOLA/USDC stable pool LP token
      */
     function getLpTokenPrice() internal view returns (uint) {
         (uint dolaAmountOneLP, uint usdcAmountOneLP) = router.quoteRemoveLiquidity(address(DOLA), address(USDC), true, factory, 0.001 ether);
@@ -315,7 +312,7 @@ contract VeloFarmerV2 {
 
     /**
      * @notice Method for gov to change the chair
-     * @dev chair address should be set to the address of L1 VeloFarmerMessenger if it is being used
+     * @dev chair address should be set to the address of L1 AeroFedMessenger if it is being used
      * @param newChair_ L1 address to be set as chair
      */
     function changeChair(address newChair_) external onlyGov {
@@ -339,11 +336,11 @@ contract VeloFarmerV2 {
     }
 
     /**
-     * @notice Method for gov to change the L1 optiFed address
-     * @dev optiFed is the L1 address that receives all bridged DOLA/USDC from both withdrawToL1OptiFed functions
-     * @param newOptiFed_ L1 address to be set as optiFed
+     * @notice Method for gov to change the L1 baseFed address
+     * @dev baseFed is the L1 address that receives all bridged DOLA/USDC from both withdrawToL1BaseFed functions
+     * @param newBaseFed_ L1 address to be set as baseFed
      */
-    function changeOptiFed(address newOptiFed_) external onlyGov {
-        optiFed = newOptiFed_;
+    function changeBaseFed(address newBaseFed_) external onlyGov {
+        baseFed = newBaseFed_;
     }
 }

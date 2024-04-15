@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
-import "src/interfaces/opti/ICrossDomainMessenger.sol";
 
-contract VeloFarmerMessenger {
-    ICrossDomainMessenger constant crossDomainMessenger = ICrossDomainMessenger(0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1);
-    address public veloFed;
+import {ICrossDomainMessenger} from "src/interfaces/opti/ICrossDomainMessenger.sol";
+
+contract AeroFedMessenger {
+    ICrossDomainMessenger constant crossDomainMessenger = ICrossDomainMessenger(0x866E82a600A1414e583f7F13623F1aC5d58b0Afa);
+    address public aeroFed;
     address public gov;
     address public pendingGov;
     address public guardian;
@@ -12,11 +13,11 @@ contract VeloFarmerMessenger {
 
     uint32 public gasLimit = 750_000;
 
-    constructor(address gov_, address chair_, address guardian_, address veloFed_) {
+    constructor(address gov_, address chair_, address guardian_, address aeroFed_) {
         gov = gov_;
         chair = chair_;
         guardian = guardian_;
-        veloFed = veloFed_;
+        aeroFed = aeroFed_;
     } 
 
     modifier onlyGov {
@@ -47,7 +48,7 @@ contract VeloFarmerMessenger {
     //Helper functions
 
     function sendMessage(bytes memory message) internal {
-        crossDomainMessenger.sendMessage(address(veloFed), message, gasLimit);
+        crossDomainMessenger.sendMessage(address(aeroFed), message, gasLimit);
     }
 
     //Gov Messaging functions
@@ -88,14 +89,14 @@ contract VeloFarmerMessenger {
         sendMessage(abi.encodeWithSignature("changeL2Chair(address)", newChair_));
     }
 
-    function changeOptiFed(address optiFed_) public onlyGov {
-        sendMessage(abi.encodeWithSignature("changeOptiFed(address)", optiFed_));
+    function changeBaseFed(address baseFed_) public onlyGov {
+        sendMessage(abi.encodeWithSignature("changeBaseFed(address)", baseFed_));
     }
 
     //Chair messaging functions
 
-    function claimVeloRewards() public onlyChair {
-        sendMessage(abi.encodeWithSignature("claimVeloRewards()"));
+    function claimAeroRewards() public onlyChair {
+        sendMessage(abi.encodeWithSignature("claimAeroRewards()"));
     }
 
     function claimRewards(address[] calldata addrs) public onlyChair {
@@ -118,16 +119,12 @@ contract VeloFarmerMessenger {
         sendMessage(abi.encodeWithSignature("withdrawLiquidityAndSwapToDOLA(uint256)", dolaAmount));
     }
 
-    function withdrawToL1OptiFed(uint dolaAmount) public onlyChair {
-        sendMessage(abi.encodeWithSignature("withdrawToL1OptiFed(uint256)", dolaAmount));
+    function withdrawToL1BaseFed(uint dolaAmount) public onlyChair {
+        sendMessage(abi.encodeWithSignature("withdrawToL1BaseFed(uint256)", dolaAmount));
     }
 
-    function withdrawToL1OptiFed(uint dolaAmount, uint usdcAmount) public onlyChair {
-        sendMessage(abi.encodeWithSignature("withdrawToL1OptiFed(uint256,uint256)", dolaAmount, usdcAmount));
-    }
-
-    function withdrawTokensToL1(address l2Token, address to, uint amount) public onlyChair {
-        sendMessage(abi.encodeWithSignature("withdrawTokensToL1(address,address,uint256)", l2Token, to, amount));
+    function withdrawToL1BaseFed(uint dolaAmount, uint usdcAmount) public onlyChair {
+        sendMessage(abi.encodeWithSignature("withdrawToL1BaseFed(uint256,uint256)", dolaAmount, usdcAmount));
     }
 
     function swapUSDCtoDOLA(uint usdcAmount) public onlyChair {
@@ -143,6 +140,10 @@ contract VeloFarmerMessenger {
     }
 
     //Gov functions
+
+    function withdrawTokensToL1(address l2Token, address to, uint amount) public onlyGov {
+        sendMessage(abi.encodeWithSignature("withdrawTokensToL1(address,address,uint256)", l2Token, to, amount));
+    }
 
     function setGasLimit(uint32 newGasLimit_) public onlyGov {
         gasLimit = newGasLimit_;
@@ -165,7 +166,7 @@ contract VeloFarmerMessenger {
         guardian = newGuardian_;
     }
 
-    function setVeloFed(address veloFed_) public onlyGov {
-        veloFed = veloFed_;
+    function setAeroFed(address aeroFed_) public onlyGov {
+        aeroFed = aeroFed_;
     }
 }

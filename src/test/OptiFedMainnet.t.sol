@@ -3,11 +3,11 @@ pragma solidity ^0.8.13;
 
 import "ds-test/test.sol";
 import "forge-std/Test.sol";
-import { IERC20 } from "../interfaces/IERC20.sol";
-import { IDola } from "../interfaces/velo/IDola.sol";
+import { IERC20 } from "src/interfaces/IERC20.sol";
+import { IDola } from "src/interfaces/IDola.sol";
 import {VeloFarmer} from "../velo-fed/VeloFarmer.sol";
 import {OptiFed} from "../velo-fed/OptiFed.sol";
-import "../interfaces/velo/ICurvePool.sol";
+import "src/interfaces/curve/ICurvePool.sol";
 
 contract OptiFedMainnetTest is Test {
     //Tokens

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../interfaces/IERC20.sol";
-import "../interfaces/IDola.sol";
-import "../interfaces/opti/IL1ERC20Bridge.sol";
-import "../interfaces/curve/ICurvePool.sol";
+import "src/interfaces/IERC20.sol";
+import "src/interfaces/IDola.sol";
+import "src/interfaces/opti/IL1ERC20Bridge.sol";
+import "src/interfaces/curve/ICurvePool.sol";
 
-contract OptiFed {
+contract BaseNetworkFed {
     address public chair;
     address public gov;
     address public pendingGov;
@@ -19,11 +19,11 @@ contract OptiFed {
 
     IDola public constant DOLA = IDola(0x865377367054516e17014CcdED1e7d814EDC9ce4);
     IERC20 public constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    IL1ERC20Bridge public constant optiBridge = IL1ERC20Bridge(0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1);
-    address public constant DOLA_OPTI = 0x8aE125E8653821E851F12A49F7765db9a9ce7384;
-    address public constant USDC_OPTI = 0x7F5c764cBc14f9669B88837ca1490cCa17c31607;
+    IL1ERC20Bridge public constant baseBridge = IL1ERC20Bridge(0x3154Cf16ccdb4C6d922629664174b904d80F2C35);
+    address public constant DOLA_BASE = 0x4621b7A9c75199271F773Ebd9A499dbd165c3191;
+    address public constant USDC_BASE = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
     ICurvePool public curvePool = ICurvePool(0xE57180685E3348589E9521aa53Af0BCD497E884d);
-    address public veloFarmer;
+    address public aeroFed;
 
     event Expansion(uint amount);
     event Contraction(uint amount);
@@ -39,19 +39,19 @@ contract OptiFed {
     constructor(
             address gov_,
             address chair_,
-            address veloFarmer_,
+            address aeroFed_,
             uint maxSlippageBpsDolaToUsdc_,
             uint maxSlippageBpsUsdcToDola_)
     {
         gov = gov_;
         chair = chair_;
-        veloFarmer = veloFarmer_;
+        aeroFed = aeroFed_;
         maxSlippageBpsDolaToUsdc = maxSlippageBpsDolaToUsdc_;
         maxSlippageBpsUsdcToDola = maxSlippageBpsUsdcToDola_;
     }
 
     /**
-    @notice Mints `dolaAmount` of DOLA, swaps `dolaToSwap` of DOLA to USDC, then transfers all to `veloFarmer` through optimism bridge
+    @notice Mints `dolaAmount` of DOLA, swaps `dolaToSwap` of DOLA to USDC, then transfers all to `aeroFed` through base bridge
     @param dolaAmount Amount of DOLA to mint
     @param dolaToSwap Amount of DOLA to swap for USDC
     */
@@ -66,17 +66,17 @@ contract OptiFed {
         uint usdcAmount = curvePool.exchange_underlying(0, 2, dolaToSwap, dolaToSwap * (PRECISION - maxSlippageBpsDolaToUsdc) / PRECISION / DOLA_USDC_CONVERSION_MULTI);
 
         uint dolaToBridge = dolaAmount - dolaToSwap;
-        DOLA.approve(address(optiBridge), dolaToBridge);
-        USDC.approve(address(optiBridge), usdcAmount);
-        optiBridge.depositERC20To(address(DOLA), DOLA_OPTI, veloFarmer, dolaToBridge, 200_000, "");
-        optiBridge.depositERC20To(address(USDC), USDC_OPTI, veloFarmer, usdcAmount, 200_000, "");
+        DOLA.approve(address(baseBridge), dolaToBridge);
+        USDC.approve(address(baseBridge), usdcAmount);
+        baseBridge.depositERC20To(address(DOLA), DOLA_BASE, aeroFed, dolaToBridge, 200_000, "");
+        baseBridge.depositERC20To(address(USDC), USDC_BASE, aeroFed, usdcAmount, 200_000, "");
 
         emit Expansion(dolaAmount);
     }
 
     /**
-    @notice Mints & deposits `amountUnderlying` of `underlying` tokens into Optimism bridge to the `veloFarmer` contract
-    @param dolaAmount Amount of underlying token to mint & deposit into Velodrome farmer on Optimism
+    @notice Mints & deposits `amountUnderlying` of `underlying` tokens into Base bridge to the `aeroFed` contract
+    @param dolaAmount Amount of underlying token to mint & deposit into Velodrome farmer on Base
     */
     function expansion(uint dolaAmount) external {
         if (msg.sender != chair) revert OnlyChair();
@@ -84,8 +84,8 @@ contract OptiFed {
         dolaSupply += dolaAmount;
         DOLA.mint(address(this), dolaAmount);
 
-        DOLA.approve(address(optiBridge), dolaAmount);
-        optiBridge.depositERC20To(address(DOLA), DOLA_OPTI, veloFarmer, dolaAmount, 200_000, "");
+        DOLA.approve(address(baseBridge), dolaAmount);
+        baseBridge.depositERC20To(address(DOLA), DOLA_BASE, aeroFed, dolaAmount, 200_000, "");
 
         emit Expansion(dolaAmount);
     }
@@ -208,13 +208,13 @@ contract OptiFed {
     }
 
     /**
-    @notice Method for gov to change the L2 veloFarmer address
-    @dev veloFarmer is the L2 address that receives all bridged DOLA from expansion
-    @param newVeloFarmer_ L2 address to be set as veloFarmer
+    @notice Method for gov to change the L2 aeroFed address
+    @dev aeroFed is the L2 address that receives all bridged DOLA from expansion
+    @param newAeroFed_ L2 address to be set as aeroFed
     */
-     function changeVeloFarmer(address newVeloFarmer_) external {
+     function changeAeroFed(address newAeroFed_) external {
         if (msg.sender != gov) revert OnlyGov();
-        veloFarmer = newVeloFarmer_;
+        aeroFed = newAeroFed_;
     }
 
     /**
