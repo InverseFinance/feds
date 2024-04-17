@@ -23,6 +23,7 @@ contract VeloFarmerV3Test is Test {
     IL2CrossDomainMessenger public l2CrossDomainMessenger = IL2CrossDomainMessenger(0x4200000000000000000000000000000000000007);
     address public l1CrossDomainMessenger = 0x36BDE71C97B33Cc4729cf772aE268934f7AB70B2;
     address public treasury = 0xa283139017a2f5BAdE8d8e25412C600055D318F8;
+    address public l1Treasury = 0x926dF14a23BE491164dCF93f4c468A50ef659D5B;
     address public cctpMainnet = 0xBd3fa81B58Ba92a82136038B25aDec7066af3155;
     address public cctpOpti = 0x2B4069517957735bE00ceE0fadAE88a26365528f;
     address public usdcNativeWhale = 0x8aF3827a41c26C7F32C81E93bb66e837e0210D5c; // 10 M nUSDC available at block 118031906
@@ -32,7 +33,7 @@ contract VeloFarmerV3Test is Test {
     address user = address(69);
     address chair = address(0xB);
     address l2chair = address(0xC);
-    address gov = address(0x607);
+    address gov = address(0x607); // VeloMessengerV3
     address guardian = address(0xD);
 
     //Numbas
@@ -74,6 +75,17 @@ contract VeloFarmerV3Test is Test {
         vm.label(address(USDC), "USDC");
         vm.label(address(DOLA), "DOLA");
 
+        address[] memory addresses = new address[](9);
+        addresses[0] = gov;
+        addresses[1] = chair;
+        addresses[2] = l2chair;
+        addresses[3] = treasury;
+        addresses[4] = l1Treasury;
+        addresses[5] = guardian;
+        addresses[6] = l2optiBridgeAddress;
+        addresses[7] = optiFedAddress;
+        addresses[8] = cctpOpti;
+
         uint[] memory maxSlippageBps = new uint[](6);
         maxSlippageBps[0] = maxSlippageBpsDolaToUsdc;
         maxSlippageBps[1] = maxSlippageBpsUsdcToDola;
@@ -83,7 +95,7 @@ contract VeloFarmerV3Test is Test {
         maxSlippageBps[5] = maxSlippageBpsUsdcNativeToUsdc;
 
         vm.startPrank(chair);
-        fed = new VeloFarmerV3(gov, chair, l2chair, treasury, guardian, l2optiBridgeAddress, optiFedAddress,cctpOpti, maxSlippageBps, maxSlippageLiquidity);
+        fed = new VeloFarmerV3(addresses, maxSlippageBps, maxSlippageLiquidity);
         vm.makePersistent(address(fed));
 
         vm.stopPrank();
@@ -207,6 +219,39 @@ contract VeloFarmerV3Test is Test {
 
         fed.withdrawToL1OptiFedNative(DOLA.balanceOf(address(fed)), nUSDC.balanceOf(address(fed))/2);
         fed.withdrawToL1OptiFedNative(nUSDC.balanceOf(address(fed)));
+    }
+
+    function testL2_withdrawTokensToL1() public {
+        // USDT
+        deal(address(0x94b008aA00579c1307B0EF2c499aD98a8ce58e58), address(fed), 1000e6);
+        vm.startPrank(l2chair);
+        fed.withdrawTokensToL1(address(0x94b008aA00579c1307B0EF2c499aD98a8ce58e58), 1000e6);
+    }
+
+    function testL2_withdrawTokensToL1_fails() public {
+        gibDOLA(address(fed), dolaAmount);
+        gibUSDCNative(address(fed), usdcAmount);
+        gibUSDC(address(fed), usdcAmount);
+        deal(address(VELO), address(fed), 1000 ether);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(OnlyRole.selector, fed.l1Chair(), fed.l2Chair())
+        );
+        fed.withdrawTokensToL1(address(VELO), dolaAmount);
+
+        vm.startPrank(l2chair);
+        vm.expectRevert(abi.encodeWithSelector(VeloFarmerV3.RestrictedToken.selector));
+        fed.withdrawTokensToL1(address(DOLA), dolaAmount);
+        vm.expectRevert(abi.encodeWithSelector(VeloFarmerV3.RestrictedToken.selector));
+        fed.withdrawTokensToL1(address(USDC), usdcAmount);
+        vm.expectRevert(abi.encodeWithSelector(VeloFarmerV3.RestrictedToken.selector));
+        fed.withdrawTokensToL1(address(nUSDC), usdcAmount);
+    }
+
+    function testL2_withdrawToL1OptiFedBridged() public {
+        gibUSDC(address(fed), usdcAmount);
+        vm.prank(l2chair);
+        fed.withdrawToL1OptiFedBridged(usdcAmount);
     }
 
     function testL2_DepositAndClaimVeloRewards() public {

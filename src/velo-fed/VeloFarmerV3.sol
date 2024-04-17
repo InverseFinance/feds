@@ -291,6 +291,7 @@ contract VeloFarmerV3 {
     address public gov;
     address public treasury;
     address public guardian;
+    address public l1Treasury;
 
     uint public maxSlippageBpsDolaToUsdc;
     uint public maxSlippageBpsUsdcToDola;
@@ -326,26 +327,21 @@ contract VeloFarmerV3 {
     error RestrictedToken();
 
     constructor(
-        address gov_,
-        address l1Chair_,
-        address l2Chair_,
-        address treasury_,
-        address guardian_,
-        address bridge_,
-        address optiFed_,
-        address cctp_,
+        address[] memory addresses,
         uint[] memory maxSlippageBps,
         uint maxSlippageBpsLiquidity_
         )
     {
-        gov = gov_;
-        l1Chair = l1Chair_;
-        l2Chair = l2Chair_;
-        treasury = treasury_;
-        guardian = guardian_;
-        bridge = IL2ERC20Bridge(bridge_);
-        optiFed = optiFed_;
-        cctp = ICCTP(cctp_);
+        gov = addresses[0];
+        l1Chair = addresses[1];
+        l2Chair = addresses[2];
+        treasury = addresses[3];
+        l1Treasury = addresses[4];
+        guardian = addresses[5];
+        bridge = IL2ERC20Bridge(addresses[6]);
+        optiFed = addresses[7];
+        cctp = ICCTP(addresses[8]);
+
         maxSlippageBpsDolaToUsdc = maxSlippageBps[0];
         maxSlippageBpsUsdcToDola = maxSlippageBps[1];
         maxSlippageBpsUsdcNativeToDola = maxSlippageBps[2];
@@ -500,16 +496,25 @@ contract VeloFarmerV3 {
     }
 
     /**
+     * @notice Withdraws `usdcAmount` of USDC to optiFed on L1. Will take 7 days before withdraw is claimable.
+     * @param usdcAmount Amount of USDC to withdraw and send to L1 OptiFed
+     */
+    function withdrawToL1OptiFedBridged(uint usdcAmount) external onlyRole(l1Chair, l2Chair) {
+        if (usdcAmount > USDC.balanceOf(address(this))) revert NotEnoughTokens();
+
+        bridge.withdrawTo(address(USDC), optiFed, usdcAmount, 0, "");
+    }
+    /**
      * @notice Withdraws `amount` of `l2Token` to address `to` on L1. Will take 7 days before withdraw is claimable.
      * @param l2Token Address of the L2 token to be withdrawn
      * @param amount Amount of the L2 token to be withdrawn
      */
     function withdrawTokensToL1(address l2Token, uint amount) external onlyRole(l1Chair, l2Chair) {
         if (amount > IERC20(l2Token).balanceOf(address(this))) revert NotEnoughTokens();
-        if(l2Token == address(DOLA) || l2Token == address(nUSDC)) revert RestrictedToken();
+        if(l2Token == address(DOLA) || l2Token == address(nUSDC) || l2Token == address(USDC) ) revert RestrictedToken();
 
         IERC20(l2Token).approve(address(bridge), amount);
-        bridge.withdrawTo(l2Token, treasury, amount, 0, "");
+        bridge.withdrawTo(l2Token, l1Treasury, amount, 0, "");
     }
 
     /**

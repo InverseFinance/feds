@@ -186,10 +186,14 @@ contract VeloFarmerMessengerV3 {
         sendMessage(abi.encodeWithSignature("withdrawToL1OptiFedNative(uint256)", usdcAmount));
     }
 
+    function withdrawToL1OptiFedBridged(uint usdcAmount) public onlyChair {
+        sendMessage(abi.encodeWithSignature("withdrawToL1OptiFedBridged(uint256)", usdcAmount));
+    }
+    
     function withdrawTokensToL1(address l2Token, uint amount) public onlyChair {
         sendMessage(abi.encodeWithSignature("withdrawTokensToL1(address, uint256)", l2Token, amount));
     }
-
+    
     function swapUSDCtoDOLA(uint usdcAmount) public onlyChair {
         sendMessage(abi.encodeWithSignature("swapUSDCtoDOLA(uint256)", usdcAmount));
     }
