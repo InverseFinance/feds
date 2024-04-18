@@ -32,7 +32,7 @@ interface ICCTP {
 }
 
 
-contract OptiFedCCTP {
+contract BaseFedCCTP {
     address public chair;
     address public gov;
     address public pendingGov;
@@ -45,13 +45,15 @@ contract OptiFedCCTP {
 
     IDola public constant DOLA = IDola(0x865377367054516e17014CcdED1e7d814EDC9ce4);
     IERC20 public constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    IL1ERC20Bridge public constant optiBridge = IL1ERC20Bridge(0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1);
-    address public constant DOLA_OPTI = 0x8aE125E8653821E851F12A49F7765db9a9ce7384;
-    address public constant USDC_OPTI = 0x7F5c764cBc14f9669B88837ca1490cCa17c31607;
+    IL1ERC20Bridge public constant baseBridge = IL1ERC20Bridge(0x3154Cf16ccdb4C6d922629664174b904d80F2C35);
+    address public constant DOLA_BASE = 0x4621b7A9c75199271F773Ebd9A499dbd165c3191;
+    address public constant USDC_BASE = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
     ICurvePool public curvePool = ICurvePool(0xE57180685E3348589E9521aa53Af0BCD497E884d);
     ICCTP public constant CCTP = ICCTP(0xBd3fa81B58Ba92a82136038B25aDec7066af3155);
-    uint32 public constant OPTIMISM_CCTP_DOMAIN = 2;
-    address public veloFarmer;
+    uint32 public constant BASE_CCTP_DOMAIN = 6;
+    int128 public dolaIndex = 0;
+    int128 public usdcIndex = 2;
+    address public aeroFarmer;
 
     event Expansion(uint amount);
     event Contraction(uint amount);
@@ -67,22 +69,22 @@ contract OptiFedCCTP {
     constructor(
             address gov_,
             address chair_,
-            address veloFarmer_,
+            address aeroFarmer_,
             uint maxSlippageBpsDolaToUsdc_,
             uint maxSlippageBpsUsdcToDola_)
     {
         gov = gov_;
         chair = chair_;
-        veloFarmer = veloFarmer_;
+        aeroFarmer = aeroFarmer_;
         maxSlippageBpsDolaToUsdc = maxSlippageBpsDolaToUsdc_;
         maxSlippageBpsUsdcToDola = maxSlippageBpsUsdcToDola_;
     }
 
     /**
-    @notice Mints `dolaAmount` of DOLA, swaps `dolaToSwap` of DOLA to USDC, then transfers all to `veloFarmer` through optimism bridge
+    @notice Mints `dolaAmount` of DOLA, swaps `dolaToSwap` of DOLA to USDC, then transfers all to `aeroFarmer` through base bridge
     @param dolaAmount Amount of DOLA to mint
     @param dolaToSwap Amount of DOLA to swap for USDC
-    @param useCCTP If true, will use CCTP to bridge USDC. If false, will use Optimism bridge
+    @param useCCTP If true, will use CCTP to bridge USDC. If false, will use Base bridge
     */
     function expansionAndSwap(uint dolaAmount, uint dolaToSwap, bool useCCTP) external {
         if (msg.sender != chair) revert OnlyChair();
@@ -92,27 +94,27 @@ contract OptiFedCCTP {
         DOLA.mint(address(this), dolaAmount);
 
         DOLA.approve(address(curvePool), dolaToSwap);
-        uint usdcAmount = curvePool.exchange_underlying(0, 2, dolaToSwap, dolaToSwap * (PRECISION - maxSlippageBpsDolaToUsdc) / PRECISION / DOLA_USDC_CONVERSION_MULTI);
+        uint usdcAmount = curvePool.exchange_underlying(dolaIndex, usdcIndex, dolaToSwap, dolaToSwap * (PRECISION - maxSlippageBpsDolaToUsdc) / PRECISION / DOLA_USDC_CONVERSION_MULTI);
 
         uint dolaToBridge = dolaAmount - dolaToSwap;
-        DOLA.approve(address(optiBridge), dolaToBridge);
+        DOLA.approve(address(baseBridge), dolaToBridge);
         
-        optiBridge.depositERC20To(address(DOLA), DOLA_OPTI, veloFarmer, dolaToBridge, 200_000, "");
+        baseBridge.depositERC20To(address(DOLA), DOLA_BASE, aeroFarmer, dolaToBridge, 200_000, "");
 
         if(useCCTP){
             USDC.approve(address(CCTP), usdcAmount);
-            CCTP.depositForBurn(usdcAmount, OPTIMISM_CCTP_DOMAIN, bytes32(uint256(uint160(veloFarmer))), address(USDC));
+            CCTP.depositForBurn(usdcAmount, BASE_CCTP_DOMAIN, bytes32(uint256(uint160(aeroFarmer))), address(USDC));
         } else {
-            USDC.approve(address(optiBridge), usdcAmount);
-            optiBridge.depositERC20To(address(USDC), USDC_OPTI, veloFarmer, usdcAmount, 200_000, "");
+            USDC.approve(address(baseBridge), usdcAmount);
+            baseBridge.depositERC20To(address(USDC), USDC_BASE, aeroFarmer, usdcAmount, 200_000, "");
         }
 
         emit Expansion(dolaAmount);
     }
 
     /**
-    @notice Mints & deposits `amountUnderlying` of `underlying` tokens into Optimism bridge to the `veloFarmer` contract
-    @param dolaAmount Amount of underlying token to mint & deposit into Velodrome farmer on Optimism
+    @notice Mints & deposits `amountUnderlying` of `underlying` tokens into Base bridge to the `aeroFarmer` contract
+    @param dolaAmount Amount of underlying token to mint & deposit into Aerodrome farmer on Base
     */
     function expansion(uint dolaAmount) external {
         if (msg.sender != chair) revert OnlyChair();
@@ -120,8 +122,8 @@ contract OptiFedCCTP {
         dolaSupply += dolaAmount;
         DOLA.mint(address(this), dolaAmount);
 
-        DOLA.approve(address(optiBridge), dolaAmount);
-        optiBridge.depositERC20To(address(DOLA), DOLA_OPTI, veloFarmer, dolaAmount, 200_000, "");
+        DOLA.approve(address(baseBridge), dolaAmount);
+        baseBridge.depositERC20To(address(DOLA), DOLA_BASE, aeroFarmer, dolaAmount, 200_000, "");
 
         emit Expansion(dolaAmount);
     }
@@ -172,7 +174,7 @@ contract OptiFedCCTP {
         if (msg.sender != chair) revert OnlyChair();
         
         USDC.approve(address(curvePool), usdcAmount);
-        curvePool.exchange_underlying(2, 0, usdcAmount, usdcAmount * (PRECISION - maxSlippageBpsUsdcToDola) / PRECISION * DOLA_USDC_CONVERSION_MULTI);
+        curvePool.exchange_underlying(usdcIndex, dolaIndex, usdcAmount, usdcAmount * (PRECISION - maxSlippageBpsUsdcToDola) / PRECISION * DOLA_USDC_CONVERSION_MULTI);
     }
 
     /**
@@ -184,11 +186,11 @@ contract OptiFedCCTP {
         if (msg.sender != chair) revert OnlyChair();
         
         DOLA.approve(address(curvePool), dolaAmount);
-        curvePool.exchange_underlying(0, 2, dolaAmount, dolaAmount * (PRECISION - maxSlippageBpsDolaToUsdc) / PRECISION / DOLA_USDC_CONVERSION_MULTI);
+        curvePool.exchange_underlying(dolaIndex, usdcIndex, dolaAmount, dolaAmount * (PRECISION - maxSlippageBpsDolaToUsdc) / PRECISION / DOLA_USDC_CONVERSION_MULTI);
     }
 
     /**
-    @notice Method for current chair of the Opti FED to resign
+    @notice Method for current chair of the Base FED to resign
     */
     function resign() external {
         if (msg.sender != chair) revert OnlyChair();
@@ -244,21 +246,25 @@ contract OptiFedCCTP {
     }
 
     /**
-    @notice Method for gov to change the L2 veloFarmer address
-    @dev veloFarmer is the L2 address that receives all bridged DOLA from expansion
-    @param newVeloFarmer_ L2 address to be set as veloFarmer
+    @notice Method for gov to change the L2 aeroFarmer address
+    @dev aeroFarmer is the L2 address that receives all bridged DOLA from expansion
+    @param newAeroFarmer_ L2 address to be set as aeroFarmer
     */
-     function changeVeloFarmer(address newVeloFarmer_) external {
+     function changeAeroFarmer(address newAeroFarmer_) external {
         if (msg.sender != gov) revert OnlyGov();
-        veloFarmer = newVeloFarmer_;
+        aeroFarmer = newAeroFarmer_;
     }
 
     /**
     @notice Method for gov to change the curve pool address
-    @param newCurvePool_ Address to be set as curvePool
+    @param newCurvePool_ Address to be set as curvePool 
+    @param _dolaIndex int of the dola coin index in the new curvepool
+    @param _usdcIndex int of the usdc coin index in the new curvepool
     */
-     function changeCurvePool(address newCurvePool_) external {
+     function changeCurvePool(address newCurvePool_, int128 _dolaIndex, int128 _usdcIndex) external {
         if (msg.sender != gov) revert OnlyGov();
+        dolaIndex = _dolaIndex;
+        usdcIndex = _usdcIndex;
         curvePool = ICurvePool(newCurvePool_);
     }
 }
