@@ -7,7 +7,6 @@ import {VeloFarmerMessengerV3} from "src/velo-fed/VeloFarmerMessengerV3.sol";
 import {OptiFedCCTP} from "src/velo-fed/OptiFedCCTP.sol";
 
 contract VeloFarmerV3Deploy is Script {
-    // UPDATE THIS
     address l2Chair = 0x9f9Fa2C6b432689Dcd4E3ad55f86FdE6c03694EE;
     address l1Chair = 0x8F97cCA30Dbe80e7a8B462F1dD1a51C32accDfC8;
     address l2Guardian = 0x257D2836c8f5797581740543F853403b81C44b5A;
