@@ -16,10 +16,11 @@ contract AeroFarmerDeploy is Script {
 
     //Change to correspond with deployer private key
     address deployerAddress = 0x11EC78492D53c9276dD7a184B1dbfB34E50B710D;
-    
+
     address cctpBase = 0x1682Ae6375C4E4A97e4B583BC394c861A46D8962;
     address l2baseBridgeAddress = 0x4200000000000000000000000000000000000010;
 
+    address exchangeProxy = 0x111111125421cA6dc452d289314280a0f8842A65; // 1inch v6 Exchange Proxy
     uint maxSlippageBpsDolaToUsdc = 60;
     uint maxSlippageBpsUsdcToDola = 60;
     uint maxSlippageBpsUsdcNativeToDola = 60;
@@ -35,13 +36,21 @@ contract AeroFarmerDeploy is Script {
 
         uint mainnetFork = vm.createSelectFork(mainnetRPC);
         //Deploy messenger without associated aeroFarmer and msg.sender as gov
-        AeroFarmerMessenger messenger = AeroFarmerMessenger(0x09aF9E0D4932604913F7Cd77aD5e157F0BC700eA);//deployAeroMessenger(deployerAddress, address(0));
+        AeroFarmerMessenger messenger = AeroFarmerMessenger(
+            0x09aF9E0D4932604913F7Cd77aD5e157F0BC700eA
+        ); //deployAeroMessenger(deployerAddress, address(0));
 
         //Deploy BaseFedCCTP without associated aeroFarmer and msg.sender as gov
-        BaseFedCCTP baseFed = BaseFedCCTP(0x783719dDf09D2ee0960BB365f7Ef652bfE35F54d);//deployBaseFed(deployerAddress, address(0));
+        BaseFedCCTP baseFed = BaseFedCCTP(
+            0x783719dDf09D2ee0960BB365f7Ef652bfE35F54d
+        ); //deployBaseFed(deployerAddress, address(0));
 
         //Deploy AeroFarmer on network of choice
-        AeroFarmer aeroFarmer = deployAeroFarmer(baseRPC, address(messenger), address(baseFed));
+        AeroFarmer aeroFarmer = deployAeroFarmer(
+            baseRPC,
+            address(messenger),
+            address(baseFed)
+        );
 
         //Change network back to mainnet
         vm.selectFork(mainnetFork);
@@ -55,12 +64,12 @@ contract AeroFarmerDeploy is Script {
         baseFed.changeAeroFarmer(address(aeroFarmer));
         //baseFed.setPendingGov(governance);
         vm.stopBroadcast();
-
-    
     }
 
-    function deployBaseFed(address gov, address aeroFarmer) public returns(BaseFedCCTP) {
-
+    function deployBaseFed(
+        address gov,
+        address aeroFarmer
+    ) public returns (BaseFedCCTP) {
         uint _maxSlippageBpsDolaToUsdc = 25;
         uint _maxSlippageBpsUsdcToDola = 10;
 
@@ -69,28 +78,46 @@ contract AeroFarmerDeploy is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        baseFed = new BaseFedCCTP(gov, l1Chair, aeroFarmer, _maxSlippageBpsDolaToUsdc, _maxSlippageBpsUsdcToDola);
+        baseFed = new BaseFedCCTP(
+            gov,
+            l1Chair,
+            aeroFarmer,
+            exchangeProxy,
+            _maxSlippageBpsDolaToUsdc,
+            _maxSlippageBpsUsdcToDola
+        );
 
         vm.stopBroadcast();
 
         return baseFed;
     }
 
-    function deployAeroMessenger(address gov, address aeroFarmer) public returns(AeroFarmerMessenger) {
+    function deployAeroMessenger(
+        address gov,
+        address aeroFarmer
+    ) public returns (AeroFarmerMessenger) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
-    
+
         AeroFarmerMessenger messenger;
 
-        messenger = new AeroFarmerMessenger(gov, l1Chair, l1Guardian, aeroFarmer);
+        messenger = new AeroFarmerMessenger(
+            gov,
+            l1Chair,
+            l1Guardian,
+            aeroFarmer
+        );
 
         vm.stopBroadcast();
 
         return messenger;
-   
     }
 
-    function deployAeroFarmer(string memory network, address messenger, address baseFed) public returns(AeroFarmer) {
+    function deployAeroFarmer(
+        string memory network,
+        address messenger,
+        address baseFed
+    ) public returns (AeroFarmer) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.createSelectFork(network);
 

@@ -17,9 +17,11 @@ contract VeloFarmerV3Deploy is Script {
 
     //Change to correspond with private key
     address deployerAddress = 0x11EC78492D53c9276dD7a184B1dbfB34E50B710D;
-    
+
     address cctpOpti = 0x2B4069517957735bE00ceE0fadAE88a26365528f; // OK
     address l2optiBridgeAddress = 0x4200000000000000000000000000000000000010; //OK
+
+    address exchangeProxy = 0x111111125421cA6dc452d289314280a0f8842A65; // 1inch v6 Exchange Proxy
 
     uint maxSlippageBpsDolaToUsdc = 60;
     uint maxSlippageBpsUsdcToDola = 60;
@@ -36,13 +38,20 @@ contract VeloFarmerV3Deploy is Script {
 
         uint mainnetFork = vm.createSelectFork(mainnetRPC);
         //Deploy messenger without associated veloFarmer and msg.sender as gov
-        VeloFarmerMessengerV3 messenger = deployVeloMessengerV3(deployerAddress, address(0));
+        VeloFarmerMessengerV3 messenger = deployVeloMessengerV3(
+            deployerAddress,
+            address(0)
+        );
 
         //Deploy OptiFedCCTP without associated veloFarmer and msg.sender as gov
         OptiFedCCTP optiFed = deployOptiFed(deployerAddress, address(0));
 
         //Deploy VeloFarmer on network of choice
-        VeloFarmerV3 veloFarmer = deployVeloFarmer(baseRPC, address(messenger), address(optiFed));
+        VeloFarmerV3 veloFarmer = deployVeloFarmer(
+            baseRPC,
+            address(messenger),
+            address(optiFed)
+        );
 
         //Change network back to mainnet
         vm.selectFork(mainnetFork);
@@ -56,12 +65,12 @@ contract VeloFarmerV3Deploy is Script {
         optiFed.changeVeloFarmer(address(veloFarmer));
         optiFed.setPendingGov(governance);
         vm.stopPrank();
-
-    
     }
 
-    function deployOptiFed(address gov, address veloFarmer) public returns(OptiFedCCTP) {
-
+    function deployOptiFed(
+        address gov,
+        address veloFarmer
+    ) public returns (OptiFedCCTP) {
         uint _maxSlippageBpsDolaToUsdc = 25;
         uint _maxSlippageBpsUsdcToDola = 10;
 
@@ -70,28 +79,46 @@ contract VeloFarmerV3Deploy is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        optiFed = new OptiFedCCTP(gov, l1Chair, veloFarmer, _maxSlippageBpsDolaToUsdc, _maxSlippageBpsUsdcToDola);
+        optiFed = new OptiFedCCTP(
+            gov,
+            l1Chair,
+            veloFarmer,
+            exchangeProxy,
+            _maxSlippageBpsDolaToUsdc,
+            _maxSlippageBpsUsdcToDola
+        );
 
         vm.stopBroadcast();
 
         return optiFed;
     }
 
-    function deployVeloMessengerV3(address gov, address veloFarmer) public returns(VeloFarmerMessengerV3) {
+    function deployVeloMessengerV3(
+        address gov,
+        address veloFarmer
+    ) public returns (VeloFarmerMessengerV3) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
-    
+
         VeloFarmerMessengerV3 messenger;
 
-        messenger = new VeloFarmerMessengerV3(gov, l1Chair, l1Guardian, veloFarmer);
+        messenger = new VeloFarmerMessengerV3(
+            gov,
+            l1Chair,
+            l1Guardian,
+            veloFarmer
+        );
 
         vm.stopBroadcast();
 
         return messenger;
-   
     }
 
-    function deployVeloFarmer(string memory network, address messenger, address optiFed) public returns(VeloFarmerV3) {
+    function deployVeloFarmer(
+        string memory network,
+        address messenger,
+        address optiFed
+    ) public returns (VeloFarmerV3) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.createSelectFork(network);
 
