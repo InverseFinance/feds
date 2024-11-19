@@ -226,9 +226,9 @@ contract OptiFedCCTP {
     }
 
     /**
-     * @notice Swap `usdcAmount` of USDC for DOLA through curve.
+     * @notice Swap `usdcAmount` of USDC for DOLA through the exchange proxy.
      * @dev Will revert if actual slippage > `maxSlippageBpsUsdcToDola`
-     * @param usdcAmount Amount of USDC to be swapped to DOLA through curve.
+     * @param usdcAmount Amount of USDC to be swapped to DOLA through the exchange proxy.
      * @param swapCallData Data for calling the exchange proxy to swap USDC for DOLA
      */
     function swapUSDCtoDOLA(
@@ -255,7 +255,7 @@ contract OptiFedCCTP {
     /**
      * @notice Swap `dolaAmount` of DOLA for USDC through the exchange proxy.
      * @dev Will revert if actual slippage > `maxSlippageBpsDolaToUsdc`
-     * @param dolaAmount Amount of DOLA to be swapped to USDC through curve.
+     * @param dolaAmount Amount of DOLA to be swapped to USDC through the exchange proxy.
      * @param swapCallData Data for calling the exchange proxy to swap DOLA for USDC
      */
     function swapDOLAtoUSDC(
