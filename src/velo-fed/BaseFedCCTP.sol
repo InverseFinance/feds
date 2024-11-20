@@ -171,7 +171,7 @@ contract BaseFedCCTP {
      * @notice Mints & deposits `amountUnderlying` of `underlying` tokens into Base bridge to the `aeroFarmer` contract
      * @param dolaAmount Amount of underlying token to mint & deposit into Aerodrome farmer on Base
      */
-    function expansion(uint dolaAmount) external onlyChair {
+    function expansion(uint256 dolaAmount) external onlyChair {
         dolaSupply += dolaAmount;
         DOLA.mint(address(this), dolaAmount);
 
@@ -192,7 +192,7 @@ contract BaseFedCCTP {
      * @notice Burns `dolaAmount` of DOLA held in this contract
      * @param dolaAmount Amount of DOLA to burn
      */
-    function contraction(uint dolaAmount) public onlyChair {
+    function contraction(uint256 dolaAmount) public onlyChair {
         _contraction(dolaAmount);
     }
 
@@ -207,7 +207,7 @@ contract BaseFedCCTP {
      * @notice Attempts to contract (burn) `amount` of DOLA. Sends remainder to `gov` if `amount` > DOLA minted by this fed.
      * @param amount Amount of DOLA to contract.
      */
-    function _contraction(uint amount) internal {
+    function _contraction(uint256 amount) internal {
         if (amount == 0) revert CantBurnZeroDOLA();
         if (amount > dolaSupply) {
             DOLA.burn(dolaSupply);

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../interfaces/IERC20.sol";
-import "../interfaces/velo/IDola.sol";
-import "../interfaces/velo/IL1ERC20Bridge.sol";
+import "src/interfaces/IERC20.sol";
+import "src/interfaces/velo/IDola.sol";
+import "src/interfaces/velo/IL1ERC20Bridge.sol";
 
 interface ICCTP {
     /**
@@ -171,7 +171,7 @@ contract OptiFedCCTP {
      * @notice Mints & deposits `amountUnderlying` of `underlying` tokens into Optimism bridge to the `veloFarmer` contract
      * @param dolaAmount Amount of underlying token to mint & deposit into Velodrome farmer on Optimism
      */
-    function expansion(uint dolaAmount) external onlyChair {
+    function expansion(uint256 dolaAmount) external onlyChair {
         dolaSupply += dolaAmount;
         DOLA.mint(address(this), dolaAmount);
 
@@ -192,7 +192,7 @@ contract OptiFedCCTP {
      * @notice Burns `dolaAmount` of DOLA held in this contract
      * @param dolaAmount Amount of DOLA to burn
      */
-    function contraction(uint dolaAmount) public {
+    function contraction(uint256 dolaAmount) public {
         if (msg.sender != chair) revert OnlyChair();
 
         _contraction(dolaAmount);
@@ -211,7 +211,7 @@ contract OptiFedCCTP {
      * @notice Attempts to contract (burn) `amount` of DOLA. Sends remainder to `gov` if `amount` > DOLA minted by this fed.
      * @param amount Amount of DOLA to contract.
      */
-    function _contraction(uint amount) internal {
+    function _contraction(uint256 amount) internal {
         if (amount == 0) revert CantBurnZeroDOLA();
         if (amount > dolaSupply) {
             DOLA.burn(dolaSupply);
@@ -348,7 +348,6 @@ contract OptiFedCCTP {
     @param newVeloFarmer L2 address to be set as veloFarmer
     */
     function changeVeloFarmer(address newVeloFarmer) external onlyGov {
-        if (msg.sender != gov) revert OnlyGov();
         veloFarmer = newVeloFarmer;
     }
 }

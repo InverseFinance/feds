@@ -3,8 +3,6 @@ pragma solidity ^0.8.20;
 
 import {IERC20} from "src/interfaces/IERC20.sol";
 import {IDola} from "src/interfaces/velo/IDola.sol";
-import {BaseFedCCTP} from "src/velo-fed/BaseFedCCTP.sol";
-
 import {MockExchangeProxy} from "test/mocks/MockExchangeProxy.sol";
 import {Test} from "forge-std/Test.sol";
 
@@ -39,7 +37,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
     IDola public DOLA = IDola(0x865377367054516e17014CcdED1e7d814EDC9ce4);
     IERC20 public USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
 
-    address l1BridgeAddr; // = 0x3154Cf16ccdb4C6d922629664174b904d80F2C35;
+    address l1BridgeAddr;
     MockExchangeProxy exchangeProxy;
 
     //EOAs
@@ -54,6 +52,9 @@ abstract contract FedCCTPProxyMainnetTest is Test {
     //Feds
     IFedCCTP fed;
 
+    error OnlyChair();
+    error OnlyGov();
+    error SlippageTooHigh();
     function initialize() public {
         gibUSDC(address(exchangeProxy), 1_000_000e6);
         vm.startPrank(gov);
@@ -196,7 +197,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         );
         vm.startPrank(chair);
 
-        vm.expectRevert(BaseFedCCTP.SlippageTooHigh.selector);
+        vm.expectRevert(SlippageTooHigh.selector);
         fed.expansionAndSwap(dolaAmount, dolaAmount / 2, true, swapData);
     }
 
@@ -246,7 +247,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         vm.startPrank(chair);
         gibUSDC(address(fed), usdcAmount);
 
-        vm.expectRevert(BaseFedCCTP.SlippageTooHigh.selector);
+        vm.expectRevert(SlippageTooHigh.selector);
         fed.swapUSDCtoDOLA(usdcAmount, swapData);
     }
 
@@ -262,7 +263,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
 
         vm.startPrank(chair);
         gibDOLA(address(fed), dolaAmount);
-        vm.expectRevert(BaseFedCCTP.SlippageTooHigh.selector);
+        vm.expectRevert(SlippageTooHigh.selector);
         fed.swapDOLAtoUSDC(dolaAmount, swapData);
     }
 
@@ -305,14 +306,14 @@ abstract contract FedCCTPProxyMainnetTest is Test {
     function testL1_changeChair_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
 
-        vm.expectRevert(BaseFedCCTP.OnlyGov.selector);
+        vm.expectRevert(OnlyGov.selector);
         fed.changeChair(user);
     }
 
     function testL1_setPendingGov_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
 
-        vm.expectRevert(BaseFedCCTP.OnlyGov.selector);
+        vm.expectRevert(OnlyGov.selector);
         fed.setPendingGov(user);
     }
 
@@ -345,56 +346,56 @@ abstract contract FedCCTPProxyMainnetTest is Test {
     function testL1_setExchangeProxy_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
 
-        vm.expectRevert(BaseFedCCTP.OnlyGov.selector);
+        vm.expectRevert(OnlyGov.selector);
         fed.setExchangeProxy(address(0x70));
     }
 
     function testL1_setMaxSlippageDolaToUsdc_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
 
-        vm.expectRevert(BaseFedCCTP.OnlyGov.selector);
+        vm.expectRevert(OnlyGov.selector);
         fed.setMaxSlippageDolaToUsdc(500);
     }
 
     function testL1_setMaxSlippageUsdcToDola_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
 
-        vm.expectRevert(BaseFedCCTP.OnlyGov.selector);
+        vm.expectRevert(OnlyGov.selector);
         fed.setMaxSlippageUsdcToDola(500);
     }
 
     function testL1_resign_fail_whenCalledByNonChair() public {
         vm.startPrank(user);
 
-        vm.expectRevert(BaseFedCCTP.OnlyChair.selector);
+        vm.expectRevert(OnlyChair.selector);
         fed.resign();
     }
 
     function testL1_swapDOLAtoUSDC_fail_whenCalledByNonChair() public {
         vm.startPrank(user);
         bytes memory swapData;
-        vm.expectRevert(BaseFedCCTP.OnlyChair.selector);
+        vm.expectRevert(OnlyChair.selector);
         fed.swapDOLAtoUSDC(1e18, swapData);
     }
 
     function testL1_swapUSDCtoDOLA_fail_whenCalledByNonChair() public {
         vm.startPrank(user);
         bytes memory swapData;
-        vm.expectRevert(BaseFedCCTP.OnlyChair.selector);
+        vm.expectRevert(OnlyChair.selector);
         fed.swapUSDCtoDOLA(1e6, swapData);
     }
 
     function testL1_contractAll_fail_whenCalledByNonChair() public {
         vm.startPrank(user);
 
-        vm.expectRevert(BaseFedCCTP.OnlyChair.selector);
+        vm.expectRevert(OnlyChair.selector);
         fed.contractAll();
     }
 
     function testL1_contract_fail_whenCalledByNonChair() public {
         vm.startPrank(user);
 
-        vm.expectRevert(BaseFedCCTP.OnlyChair.selector);
+        vm.expectRevert(OnlyChair.selector);
         fed.contraction(1e18);
     }
 
