@@ -1,0 +1,77 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.10;
+
+import "src/interfaces/IERC20.sol";
+import "src/interfaces/curve/IMetaPool.sol";
+
+abstract contract CurvePoolAdapter {
+
+    IERC20 public constant dola = IERC20(0x865377367054516e17014CcdED1e7d814EDC9ce4);
+    IMetaPool public immutable crvMetapool;
+    uint public constant PRECISION = 10_000;
+    uint public immutable CRVPRECISION = 10**18;
+
+    constructor(address crvMetapool_){
+        crvMetapool = IMetaPool(crvMetapool_);
+        //Approve max uint256 spend for crvMetapool, from this address
+        dola.approve(crvMetapool_, type(uint256).max);
+        IERC20(crvMetapool_).approve(crvMetapool_, type(uint256).max);
+    }
+    /**
+     * @notice Function for depositing into curve metapool.
+     * @param amountDola Amount of dola to be deposited into metapool
+     * @param allowedSlippage Max allowed slippage. 1 = 0.01%
+     * @return Amount of Dola-Metapool tokens bought
+     */
+    function metapoolDeposit(uint256 amountDola, uint allowedSlippage) internal returns(uint256){
+        uint[2] memory amounts = [amountDola, 0];
+        uint expectedCrvLp = dolaToLp(amountDola);
+        uint minCrvLPOut = applySlippage(expectedCrvLp, allowedSlippage);
+        return crvMetapool.add_liquidity(amounts, minCrvLPOut);
+    }
+
+    /**
+     * @notice Function for depositing into curve metapool.
+     * @param amountDola Amount of dola to be withdrawn from the metapool
+     * @param allowedSlippage Max allowed slippage. 1 = 0.01%
+     * @return Amount of Dola tokens received
+     */
+    function metapoolWithdraw(uint amountDola, uint allowedSlippage) internal returns(uint256){
+        uint[2] memory amounts = [amountDola, 0];
+        uint amountCrvLp = crvMetapool.calc_token_amount( amounts, false);
+        uint expectedCrvLp = dolaToLp(amountDola);
+        //The expectedCrvLp must be higher or equal than the crvLp amount we supply - the allowed slippage
+        require(expectedCrvLp >= applySlippage(amountCrvLp, allowedSlippage), "LOSS EXCEED WITHDRAW MAX LOSS");
+        uint dolaMinOut = applySlippage(amountDola, allowedSlippage);
+        return crvMetapool.remove_liquidity_one_coin(amountCrvLp, 0, dolaMinOut);
+    }
+    
+    /**
+     * @notice Calculate the amount of curve LP tokens an amount of Dola will be worth
+     * @param amount Amount of dola
+     * @return Amount of curve LP tokens to expect from input amount of Dola before slippage
+     */
+    function dolaToLp(uint amount) internal view returns(uint){
+        return amount * CRVPRECISION / crvMetapool.get_virtual_price();
+    }
+
+    /**
+     * @notice Apply allowedSlippage to an amount. Useful for calculating minimum expected amount of LP tokens or Dola
+     * @param amount Amount of dola
+     * @param allowedSlippage The percentage slippage that is allowed. Must be within 0 < allowedSLippage <= PRECISION
+     * @return The amount with slippage applied
+     */
+    function applySlippage(uint amount, uint allowedSlippage) internal pure returns(uint256){
+        return amount * (PRECISION - allowedSlippage) / PRECISION;
+    }
+
+    /**
+     * @notice Calculates the amount of LP an input amount of DOLA should return.
+     * @param amountDola The amount of DOLA to be deposited
+     * @return amount of curve LP tokens to receive for the DOLA
+     */
+    function lpForDola(uint amountDola) internal view returns(uint256){
+        uint[2] memory amounts = [amountDola, 0];
+        return crvMetapool.calc_token_amount(amounts, false);
+    }
+}
