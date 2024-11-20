@@ -6,7 +6,7 @@
 	url = https://github.com/OffchainLabs/token-bridge-contracts
 [submodule "lib/openzeppelin"]
 	path = lib/openzeppelin
-	url = git@github.com:OpenZeppelin/openzeppelin-contracts.git
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
 [submodule "lib/arbitrum-nitro"]
 	path = lib/arbitrum-nitro
-	url = git@github.com:OffchainLabs/nitro.git
+	url = https://github.com/OffchainLabs/nitro
