@@ -237,9 +237,10 @@ contract SuperChainCCTPFed is Chairable {
         uint256 dolaAmountAfter = DOLA.balanceOf(address(this));
         if (
             dolaAmountAfter - dolaAmountBefore <
-            ((usdcAmount * (PRECISION - maxSlippageBpsUsdcToDola)) /
-                PRECISION) *
-                DOLA_USDC_CONVERSION_MULTI
+            (usdcAmount *
+                (PRECISION - maxSlippageBpsUsdcToDola) *
+                DOLA_USDC_CONVERSION_MULTI) /
+                PRECISION
         ) {
             revert SlippageTooHigh();
         }
