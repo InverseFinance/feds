@@ -1,42 +1,19 @@
 pragma solidity ^0.8.20;
 
-import {FedCCTPProxyMainnetTest, MockExchangeProxy, IFedCCTP} from "test/FedCCTPProxyMainnetTest.sol";
-import {OptiFedCCTP} from "src/velo-fed/OptiFedCCTP.sol";
+import {FedCCTPProxyMainnetTest, SuperChainCCTPFed} from "test/FedCCTPProxyMainnetTest.sol";
 
-contract OptiFedCCTPTest is FedCCTPProxyMainnetTest {
-    OptiFedCCTP optiFedCCTP;
-    address l1OptiBridgeAddr = 0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1;
+contract OptiCCTPFedTest is FedCCTPProxyMainnetTest {
+    address public constant optiBridge =
+        address(0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1);
+    address public constant DOLA_OPTI =
+        0x8aE125E8653821E851F12A49F7765db9a9ce7384;
+    address public constant USDC_OPTI =
+        0x7F5c764cBc14f9669B88837ca1490cCa17c31607;
+    uint32 public constant OPTIMISM_CCTP_DOMAIN = 2;
 
     function setUp() public {
-        vm.createSelectFork(vm.rpcUrl("mainnet"), 19512248);
+        vm.createSelectFork(vm.rpcUrl("mainnet"), 21230271);
 
-        exchangeProxy = new MockExchangeProxy(address(DOLA));
-        l1BridgeAddr = l1OptiBridgeAddr;
-
-        fed = IFedCCTP(
-            address(
-                new OptiFedCCTP(
-                    gov,
-                    chair,
-                    address(0x69),
-                    address(exchangeProxy),
-                    25,
-                    10
-                )
-            )
-        );
-
-        initialize();
-    }
-
-    function testL1_changeVeloFarmer() public {
-        vm.prank(gov);
-        OptiFedCCTP(address(fed)).changeVeloFarmer(user);
-        assertEq(OptiFedCCTP(address(fed)).veloFarmer(), user);
-    }
-    function testL1_changeVeloFarmer_fail_whenCalledByNonGov() public {
-        vm.prank(chair);
-        vm.expectRevert(OptiFedCCTP.OnlyGov.selector);
-        OptiFedCCTP(address(fed)).changeVeloFarmer(user);
+        initialize(optiBridge, DOLA_OPTI, USDC_OPTI, OPTIMISM_CCTP_DOMAIN);
     }
 }

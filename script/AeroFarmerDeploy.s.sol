@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 import {AeroFarmer} from "src/velo-fed/AeroFarmer.sol";
 import {AeroFarmerMessenger} from "src/velo-fed/AeroFarmerMessenger.sol";
-import {BaseFedCCTP} from "src/velo-fed/BaseFedCCTP.sol";
+import {SuperChainCCTPFed} from "src/velo-fed/SuperChainCCTPFed.sol";
 
 contract AeroFarmerDeploy is Script {
     // UPDATE THIS
@@ -29,6 +29,14 @@ contract AeroFarmerDeploy is Script {
     uint maxSlippageBpsUsdcNativeToUsdc = 20;
     uint maxSlippageLiquidity = 55;
 
+    address public constant baseBridge =
+        address(0x3154Cf16ccdb4C6d922629664174b904d80F2C35);
+    address public constant DOLA_BASE =
+        0x4621b7A9c75199271F773Ebd9A499dbd165c3191;
+    address public constant USDC_BASE =
+        0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
+    uint32 public constant BASE_CCTP_DOMAIN = 6;
+
     function run() external {
         string memory mainnetRPC = vm.envString("RPC_MAINNET");
         string memory baseRPC = vm.envString("RPC_BASE");
@@ -41,9 +49,7 @@ contract AeroFarmerDeploy is Script {
         ); //deployAeroMessenger(deployerAddress, address(0));
 
         //Deploy BaseFedCCTP without associated aeroFarmer and msg.sender as gov
-        BaseFedCCTP baseFed = BaseFedCCTP(
-            0x783719dDf09D2ee0960BB365f7Ef652bfE35F54d
-        ); //deployBaseFed(deployerAddress, address(0));
+        SuperChainCCTPFed baseFed = deployBaseFed(deployerAddress, address(0));
 
         //Deploy AeroFarmer on network of choice
         AeroFarmer aeroFarmer = deployAeroFarmer(
@@ -58,33 +64,37 @@ contract AeroFarmerDeploy is Script {
         //Set aeroFarmer in messenger and change gov to governance contract
         vm.startBroadcast(deployerPrivateKey);
         messenger.setAeroFed(address(aeroFarmer));
-        //messenger.setPendingMessengerGov(governance);
+        messenger.setPendingMessengerGov(governance);
 
         //Set aeroFarmer in baseFed and change gov to governance contract
-        baseFed.changeAeroFarmer(address(aeroFarmer));
-        //baseFed.setPendingGov(governance);
+        baseFed.changeFarmer(address(aeroFarmer));
+        baseFed.setPendingGov(governance);
         vm.stopBroadcast();
     }
 
     function deployBaseFed(
         address gov,
         address aeroFarmer
-    ) public returns (BaseFedCCTP) {
+    ) public returns (SuperChainCCTPFed) {
         uint _maxSlippageBpsDolaToUsdc = 25;
         uint _maxSlippageBpsUsdcToDola = 10;
 
-        BaseFedCCTP baseFed;
+        SuperChainCCTPFed baseFed;
 
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        baseFed = new BaseFedCCTP(
+        baseFed = new SuperChainCCTPFed(
             gov,
             l1Chair,
             aeroFarmer,
             exchangeProxy,
             _maxSlippageBpsDolaToUsdc,
-            _maxSlippageBpsUsdcToDola
+            _maxSlippageBpsUsdcToDola,
+            baseBridge,
+            DOLA_BASE,
+            USDC_BASE,
+            BASE_CCTP_DOMAIN
         );
 
         vm.stopBroadcast();

@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 import {VeloFarmerV3} from "src/velo-fed/VeloFarmerV3.sol";
 import {VeloFarmerMessengerV3} from "src/velo-fed/VeloFarmerMessengerV3.sol";
-import {OptiFedCCTP} from "src/velo-fed/OptiFedCCTP.sol";
+import {SuperChainCCTPFed} from "src/velo-fed/SuperChainCCTPFed.sol";
 
 contract VeloFarmerV3Deploy is Script {
     // UPDATE THIS
@@ -31,6 +31,14 @@ contract VeloFarmerV3Deploy is Script {
     uint maxSlippageBpsUsdcNativeToUsdc = 20;
     uint maxSlippageLiquidity = 55;
 
+    address public constant optiBridge =
+        address(0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1);
+    address public constant DOLA_OPTI =
+        0x8aE125E8653821E851F12A49F7765db9a9ce7384;
+    address public constant USDC_OPTI =
+        0x7F5c764cBc14f9669B88837ca1490cCa17c31607;
+    uint32 public constant OPTIMISM_CCTP_DOMAIN = 2;
+
     function run() external {
         string memory mainnetRPC = vm.envString("RPC_MAINNET");
         string memory baseRPC = vm.envString("RPC_OPTI");
@@ -44,7 +52,7 @@ contract VeloFarmerV3Deploy is Script {
         );
 
         //Deploy OptiFedCCTP without associated veloFarmer and msg.sender as gov
-        OptiFedCCTP optiFed = deployOptiFed(deployerAddress, address(0));
+        SuperChainCCTPFed optiFed = deployOptiFed(deployerAddress, address(0));
 
         //Deploy VeloFarmer on network of choice
         VeloFarmerV3 veloFarmer = deployVeloFarmer(
@@ -62,7 +70,7 @@ contract VeloFarmerV3Deploy is Script {
         messenger.setPendingMessengerGov(governance);
 
         //Set veloFarmer in optiFed and change gov to governance contract
-        optiFed.changeVeloFarmer(address(veloFarmer));
+        optiFed.changeFarmer(address(veloFarmer));
         optiFed.setPendingGov(governance);
         vm.stopPrank();
     }
@@ -70,22 +78,26 @@ contract VeloFarmerV3Deploy is Script {
     function deployOptiFed(
         address gov,
         address veloFarmer
-    ) public returns (OptiFedCCTP) {
+    ) public returns (SuperChainCCTPFed) {
         uint _maxSlippageBpsDolaToUsdc = 25;
         uint _maxSlippageBpsUsdcToDola = 10;
 
-        OptiFedCCTP optiFed;
+        SuperChainCCTPFed optiFed;
 
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        optiFed = new OptiFedCCTP(
+        optiFed = new SuperChainCCTPFed(
             gov,
             l1Chair,
             veloFarmer,
             exchangeProxy,
             _maxSlippageBpsDolaToUsdc,
-            _maxSlippageBpsUsdcToDola
+            _maxSlippageBpsUsdcToDola,
+            optiBridge,
+            DOLA_OPTI,
+            USDC_OPTI,
+            OPTIMISM_CCTP_DOMAIN
         );
 
         vm.stopBroadcast();

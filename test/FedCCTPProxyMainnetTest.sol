@@ -5,33 +5,8 @@ import {IERC20} from "src/interfaces/IERC20.sol";
 import {IDola} from "src/interfaces/velo/IDola.sol";
 import {MockExchangeProxy} from "test/mocks/MockExchangeProxy.sol";
 import {Test} from "forge-std/Test.sol";
+import {SuperChainCCTPFed} from "src/velo-fed/SuperChainCCTPFed.sol";
 
-interface IFedCCTP {
-    function expansion(uint _amount) external;
-    function expansionAndSwap(
-        uint _amount,
-        uint _amountToSwap,
-        bool _cctp,
-        bytes memory _swapData
-    ) external;
-    function swapDOLAtoUSDC(uint _amount, bytes memory _swapData) external;
-    function swapUSDCtoDOLA(uint _amount, bytes memory _swapData) external;
-    function changeChair(address _chair) external;
-    function setPendingGov(address _pendingGov) external;
-    function claimGov() external;
-    function setExchangeProxy(address _exchangeProxy) external;
-    function setMaxSlippageDolaToUsdc(uint _maxSlippageDolaToUsdc) external;
-    function setMaxSlippageUsdcToDola(uint _maxSlippageUsdcToDola) external;
-    function resign() external;
-    function contractAll() external;
-    function contraction(uint _amount) external;
-    function gov() external view returns (address);
-    function pendingGov() external view returns (address);
-    function exchangeProxy() external view returns (address);
-    function maxSlippageDolaToUsdc() external view returns (uint);
-    function maxSlippageUsdcToDola() external view returns (uint);
-    function chair() external view returns (address);
-}
 abstract contract FedCCTPProxyMainnetTest is Test {
     //Tokens
     IDola public DOLA = IDola(0x865377367054516e17014CcdED1e7d814EDC9ce4);
@@ -50,19 +25,43 @@ abstract contract FedCCTPProxyMainnetTest is Test {
     uint usdcAmount = 1_000_00e6;
 
     //Feds
-    IFedCCTP fed;
+    SuperChainCCTPFed fed;
 
     error OnlyChair();
     error OnlyGov();
     error SlippageTooHigh();
-    function initialize() public {
+    error ZeroAddressParameter();
+
+    function initialize(
+        address bridge,
+        address dola_chain,
+        address usdc_chain,
+        uint32 domain
+    ) public {
+        l1BridgeAddr = bridge;
+        exchangeProxy = new MockExchangeProxy(address(DOLA));
+
+        fed = new SuperChainCCTPFed(
+            gov,
+            chair,
+            address(0x69),
+            address(exchangeProxy),
+            25,
+            10,
+            bridge,
+            dola_chain,
+            usdc_chain,
+            domain
+        );
+
         gibUSDC(address(exchangeProxy), 1_000_000e6);
         vm.startPrank(gov);
         DOLA.addMinter(address(fed));
         DOLA.mint(address(exchangeProxy), 1_000_000e18);
         vm.stopPrank();
     }
-    function testL1_BaseFedExpansion() public {
+
+    function testL1_Expansion() public {
         vm.startPrank(chair);
 
         uint prevBal = DOLA.balanceOf(l1BridgeAddr);
@@ -72,7 +71,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         assertEq(prevBal + dolaAmount, DOLA.balanceOf(l1BridgeAddr));
     }
 
-    function testL1_BaseFedExpansionAndSwap_Half_CCTP() public {
+    function testL1_ExpansionAndSwap_Half_CCTP() public {
         vm.startPrank(chair);
 
         uint prevDolaBal = DOLA.balanceOf(l1BridgeAddr);
@@ -92,7 +91,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         assertEq(USDC.balanceOf(address(fed)), 0, "CCTP Burn Failed");
     }
 
-    function testL1_BaseFedExpansionAndSwap_Half_NO_CCTP() public {
+    function testL1_ExpansionAndSwap_Half_NO_CCTP() public {
         vm.startPrank(chair);
 
         uint prevDolaBal = DOLA.balanceOf(l1BridgeAddr);
@@ -125,7 +124,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         );
     }
 
-    function testL1_BaseFedExpansionAndSwap(uint8 multi) public {
+    function testL1_ExpansionAndSwap(uint8 multi) public {
         uint256 multiplier = bound(uint(multi), 1, 10);
         uint dolaToSwap = (dolaAmount * multiplier) / 10;
         uint dolaToBridge = dolaAmount - dolaToSwap;
@@ -162,7 +161,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         );
     }
 
-    function testL1_BaseFedExpansionAndSwap_CCTP(uint8 multi) public {
+    function testL1_ExpansionAndSwap_CCTP(uint8 multi) public {
         uint256 multiplier = bound(uint(multi), 1, 10);
         uint dolaToSwap = (dolaAmount * multiplier) / 10;
         uint dolaToBridge = dolaAmount - dolaToSwap;
@@ -186,9 +185,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         assertEq(USDC.balanceOf(address(fed)), 0, "CCTP Burn Failed");
     }
 
-    function testL1_BaseFedExpansionAndSwap_Fails_IfSlippageRestraintUnmet()
-        public
-    {
+    function testL1_ExpansionAndSwap_Fails_IfSlippageRestraintUnmet() public {
         bytes memory swapData = abi.encodeWithSelector(
             MockExchangeProxy.swapDolaIn.selector,
             address(USDC),
@@ -201,7 +198,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         fed.expansionAndSwap(dolaAmount, dolaAmount / 2, true, swapData);
     }
 
-    function testL1_BaseFedSwapDOLAtoUSDC() public {
+    function testL1_SwapDOLAtoUSDC() public {
         vm.startPrank(chair);
 
         uint prevDolaBal = DOLA.balanceOf(address(fed));
@@ -235,9 +232,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         );
     }
 
-    function testL1_BaseFedSwapUSDCtoDOLA_Fails_IfSlippageRestraintUnmet()
-        public
-    {
+    function testL1_SwapUSDCtoDOLA_Fails_IfSlippageRestraintUnmet() public {
         bytes memory swapData = abi.encodeWithSelector(
             MockExchangeProxy.swapDolaOut.selector,
             address(USDC),
@@ -251,9 +246,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         fed.swapUSDCtoDOLA(usdcAmount, swapData);
     }
 
-    function testL1_BaseFedSwapDOLAtoUSDC_Fails_IfSlippageRestraintUnmet()
-        public
-    {
+    function testL1_SwapDOLAtoUSDC_Fails_IfSlippageRestraintUnmet() public {
         bytes memory swapData = abi.encodeWithSelector(
             MockExchangeProxy.swapDolaIn.selector,
             address(USDC),
@@ -267,7 +260,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         fed.swapDOLAtoUSDC(dolaAmount, swapData);
     }
 
-    function testL1_BaseFedSwapUSDCtoDOLA() public {
+    function testL1_SwapUSDCtoDOLA() public {
         vm.startPrank(chair);
 
         uint prevDolaBal = DOLA.balanceOf(address(fed));
@@ -350,6 +343,12 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         fed.setExchangeProxy(address(0x70));
     }
 
+    function testL1_setExchangeProxy_fail_when_address_zero() public {
+        vm.prank(gov);
+        vm.expectRevert(ZeroAddressParameter.selector);
+        fed.setExchangeProxy(address(0));
+    }
+
     function testL1_setMaxSlippageDolaToUsdc_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
 
@@ -397,6 +396,24 @@ abstract contract FedCCTPProxyMainnetTest is Test {
 
         vm.expectRevert(OnlyChair.selector);
         fed.contraction(1e18);
+    }
+
+    function testL1_changeFarmer() public {
+        vm.prank(gov);
+        fed.changeFarmer(user);
+        assertEq(fed.farmer(), user);
+    }
+
+    function testL1_changeFarmer_fail_whenCalledByNonGov() public {
+        vm.prank(chair);
+        vm.expectRevert(OnlyGov.selector);
+        fed.changeFarmer(user);
+    }
+
+    function testL1_changeFarmer_fail_when_address_zero() public {
+        vm.prank(gov);
+        vm.expectRevert(ZeroAddressParameter.selector);
+        fed.changeFarmer(address(0));
     }
 
     // My loyal helpers

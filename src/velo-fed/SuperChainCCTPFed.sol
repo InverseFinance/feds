@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.20;
 
 import "src/interfaces/IERC20.sol";
 import "src/interfaces/velo/IDola.sol";
 import "src/interfaces/velo/IL1ERC20Bridge.sol";
+import {Chairable} from "src/utils/Chairable.sol";
 
 interface ICCTP {
     /**
@@ -30,25 +31,23 @@ interface ICCTP {
     ) external returns (uint64 _nonce);
 }
 
-contract OptiFedCCTP {
-    error OnlyGov();
-    error OnlyPendingGov();
-    error OnlyChair();
+/**
+ * @title SuperChainCCTPFed
+ * @notice A generic contract for SuperChain CCTP Feds
+ */
+contract SuperChainCCTPFed is Chairable {
     error CantBurnZeroDOLA();
     error MaxSlippageTooHigh();
     error SlippageTooHigh();
     error SwapMoreDolaThanMinted();
-    error InvalidProxyAddress();
     error SwapFailed();
+    error ZeroAddressParameter();
 
-    address public chair;
-    address public gov;
-    address public pendingGov;
     uint256 public dolaSupply;
     uint256 public maxSlippageBpsDolaToUsdc;
     uint256 public maxSlippageBpsUsdcToDola;
     address public exchangeProxy;
-    address public veloFarmer;
+    address public farmer;
 
     uint256 public constant PRECISION = 10_000;
     uint256 public constant DOLA_USDC_CONVERSION_MULTI = 1e12;
@@ -57,15 +56,13 @@ contract OptiFedCCTP {
         IDola(0x865377367054516e17014CcdED1e7d814EDC9ce4);
     IERC20 public constant USDC =
         IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    IL1ERC20Bridge public constant optiBridge =
-        IL1ERC20Bridge(0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1);
-    address public constant DOLA_OPTI =
-        0x8aE125E8653821E851F12A49F7765db9a9ce7384;
-    address public constant USDC_OPTI =
-        0x7F5c764cBc14f9669B88837ca1490cCa17c31607;
     ICCTP public constant CCTP =
         ICCTP(0xBd3fa81B58Ba92a82136038B25aDec7066af3155);
-    uint32 public constant OPTIMISM_CCTP_DOMAIN = 2;
+
+    IL1ERC20Bridge public immutable BRIDGE;
+    address public immutable DOLA_CHAIN;
+    address public immutable USDC_CHAIN;
+    uint32 public immutable CCTP_DOMAIN;
 
     event Expansion(uint amount);
     event Contraction(uint amount);
@@ -73,34 +70,30 @@ contract OptiFedCCTP {
     constructor(
         address gov_,
         address chair_,
-        address veloFarmer_,
+        address farmer_,
         address exchangeProxy_,
         uint256 maxSlippageBpsDolaToUsdc_,
-        uint256 maxSlippageBpsUsdcToDola_
-    ) {
-        gov = gov_;
-        chair = chair_;
-        veloFarmer = veloFarmer_;
+        uint256 maxSlippageBpsUsdcToDola_,
+        address bridge_,
+        address dola_chain_,
+        address usdc_chain_,
+        uint32 domain_
+    ) Chairable(gov_, chair_) {
+        farmer = farmer_;
         exchangeProxy = exchangeProxy_;
         maxSlippageBpsDolaToUsdc = maxSlippageBpsDolaToUsdc_;
         maxSlippageBpsUsdcToDola = maxSlippageBpsUsdcToDola_;
-    }
-
-    modifier onlyGov() {
-        if (msg.sender != gov) revert OnlyGov();
-        _;
-    }
-
-    modifier onlyChair() {
-        if (msg.sender != chair) revert OnlyChair();
-        _;
+        BRIDGE = IL1ERC20Bridge(bridge_);
+        DOLA_CHAIN = dola_chain_;
+        USDC_CHAIN = usdc_chain_;
+        CCTP_DOMAIN = domain_;
     }
 
     /**
-     * @notice Mints `dolaAmount` of DOLA, swaps `dolaToSwap` of DOLA to USDC, then transfers all to `veloFarmer` through optimism bridge
+     * @notice Mints `dolaAmount` of DOLA, swaps `dolaToSwap` of DOLA to USDC, then transfers all to `farmer` through L1 bridge
      * @param dolaAmount Amount of DOLA to mint
      * @param dolaToSwap Amount of DOLA to swap for USDC
-     * @param useCCTP If true, will use CCTP to bridge USDC. If false, will use Optimism bridge
+     * @param useCCTP If true, will use CCTP to bridge USDC. If false, will use L1 bridge
      * @param swapCallData Data for calling the exchange proxy to swap DOLA for USDC
      */
     function expansionAndSwap(
@@ -133,12 +126,12 @@ contract OptiFedCCTP {
         }
 
         uint256 dolaToBridge = dolaAmount - dolaToSwap;
-        DOLA.approve(address(optiBridge), dolaToBridge);
+        DOLA.approve(address(BRIDGE), dolaToBridge);
 
-        optiBridge.depositERC20To(
+        BRIDGE.depositERC20To(
             address(DOLA),
-            DOLA_OPTI,
-            veloFarmer,
+            DOLA_CHAIN,
+            farmer,
             dolaToBridge,
             200_000,
             ""
@@ -148,16 +141,16 @@ contract OptiFedCCTP {
             USDC.approve(address(CCTP), usdcAmount);
             CCTP.depositForBurn(
                 usdcAmount,
-                OPTIMISM_CCTP_DOMAIN,
-                bytes32(uint256(uint160(veloFarmer))),
+                CCTP_DOMAIN,
+                bytes32(uint256(uint160(farmer))),
                 address(USDC)
             );
         } else {
-            USDC.approve(address(optiBridge), usdcAmount);
-            optiBridge.depositERC20To(
+            USDC.approve(address(BRIDGE), usdcAmount);
+            BRIDGE.depositERC20To(
                 address(USDC),
-                USDC_OPTI,
-                veloFarmer,
+                USDC_CHAIN,
+                farmer,
                 usdcAmount,
                 200_000,
                 ""
@@ -168,18 +161,18 @@ contract OptiFedCCTP {
     }
 
     /**
-     * @notice Mints & deposits `amountUnderlying` of `underlying` tokens into Optimism bridge to the `veloFarmer` contract
-     * @param dolaAmount Amount of underlying token to mint & deposit into Velodrome farmer on Optimism
+     * @notice Mints & deposits `amountUnderlying` of `underlying` tokens into L1 bridge to the `farmer` contract
+     * @param dolaAmount Amount of underlying token to mint & deposit into the farmer on the SuperChain
      */
     function expansion(uint256 dolaAmount) external onlyChair {
         dolaSupply += dolaAmount;
         DOLA.mint(address(this), dolaAmount);
 
-        DOLA.approve(address(optiBridge), dolaAmount);
-        optiBridge.depositERC20To(
+        DOLA.approve(address(BRIDGE), dolaAmount);
+        BRIDGE.depositERC20To(
             address(DOLA),
-            DOLA_OPTI,
-            veloFarmer,
+            DOLA_CHAIN,
+            farmer,
             dolaAmount,
             200_000,
             ""
@@ -270,18 +263,11 @@ contract OptiFedCCTP {
         if (
             usdcAmountAfter - usdcAmountBefore <
             (dolaAmount * (PRECISION - maxSlippageBpsDolaToUsdc)) /
-                PRECISION /
-                DOLA_USDC_CONVERSION_MULTI
+                DOLA_USDC_CONVERSION_MULTI /
+                PRECISION
         ) {
             revert SlippageTooHigh();
         }
-    }
-
-    /**
-    @notice Method for current chair of the Opti FED to resign
-    */
-    function resign() external onlyChair {
-        chair = address(0);
     }
 
     /**
@@ -289,7 +275,7 @@ contract OptiFedCCTP {
      * @param newExchangeProxy Address of the new exchange proxy
      */
     function setExchangeProxy(address newExchangeProxy) external onlyGov {
-        if (newExchangeProxy == address(0)) revert InvalidProxyAddress();
+        if (newExchangeProxy == address(0)) revert ZeroAddressParameter();
         exchangeProxy = newExchangeProxy;
     }
 
@@ -316,38 +302,12 @@ contract OptiFedCCTP {
     }
 
     /**
-    @notice Method for `gov` to change `pendingGov` address
-    @dev `pendingGov` will have to call `claimGov` to complete `gov` transfer
-    @param newPendingGov Address to be set as `pendingGov`
+    @notice Method for gov to change the L2 farmer address
+    @dev farmer is the L2 address that receives all bridged DOLA from expansion
+    @param newFarmer L2 address to be set as farmer
     */
-    function setPendingGov(address newPendingGov) external onlyGov {
-        if (msg.sender != gov) revert OnlyGov();
-        pendingGov = newPendingGov;
-    }
-
-    /**
-    @notice Method for `pendingGov` to claim `gov` role.
-    */
-    function claimGov() external {
-        if (msg.sender != pendingGov) revert OnlyPendingGov();
-        gov = pendingGov;
-        pendingGov = address(0);
-    }
-
-    /**
-    @notice Method for gov to change the chair
-    @param newChair Address to be set as chair
-    */
-    function changeChair(address newChair) external onlyGov {
-        chair = newChair;
-    }
-
-    /**
-    @notice Method for gov to change the L2 veloFarmer address
-    @dev veloFarmer is the L2 address that receives all bridged DOLA from expansion
-    @param newVeloFarmer L2 address to be set as veloFarmer
-    */
-    function changeVeloFarmer(address newVeloFarmer) external onlyGov {
-        veloFarmer = newVeloFarmer;
+    function changeFarmer(address newFarmer) external onlyGov {
+        if (newFarmer == address(0)) revert ZeroAddressParameter();
+        farmer = newFarmer;
     }
 }
