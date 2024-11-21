@@ -185,18 +185,14 @@ contract SuperChainCCTPFed is Chairable {
      * @notice Burns `dolaAmount` of DOLA held in this contract
      * @param dolaAmount Amount of DOLA to burn
      */
-    function contraction(uint256 dolaAmount) public {
-        if (msg.sender != chair) revert OnlyChair();
-
+    function contraction(uint256 dolaAmount) public onlyChair {
         _contraction(dolaAmount);
     }
 
     /**
      * @notice Attempts to contract (burn) all DOLA held by this contract
      */
-    function contractAll() external {
-        if (msg.sender != chair) revert OnlyChair();
-
+    function contractAll() external onlyChair {
         _contraction(DOLA.balanceOf(address(this)));
     }
 

@@ -30,7 +30,6 @@ abstract contract Chairable {
     @param newPendingGov Address to be set as `pendingGov`
     */
     function setPendingGov(address newPendingGov) external onlyGov {
-        if (msg.sender != gov) revert OnlyGov();
         pendingGov = newPendingGov;
     }
 
