@@ -64,8 +64,23 @@ contract SuperChainCCTPFed is Chairable {
     address public immutable USDC_CHAIN;
     uint32 public immutable CCTP_DOMAIN;
 
-    event Expansion(uint amount);
-    event Contraction(uint amount);
+    event Expansion(uint256 amount);
+    event Contraction(uint256 amount);
+    event NewFarmer(address indexed oldFarmer, address indexed newFarmer);
+    event NewExchangeProxy(
+        address indexed oldExchangeProxy,
+        address indexed newExchangeProxy
+    );
+    event NewMaxSlippageDolaToUsdc(
+        uint256 oldMaxSlippageBps,
+        uint256 newMaxSlippageBps
+    );
+    event NewMaxSlippageUsdcToDola(
+        uint256 oldMaxSlippageBps,
+        uint256 newMaxSlippageBps
+    );
+    event SwapDOLAtoUSDC(uint256 dolaAmount, uint256 usdcAmount);
+    event SwapUSDCtoDOLA(uint256 usdcAmount, uint256 dolaAmount);
 
     constructor(
         address gov_,
@@ -230,9 +245,9 @@ contract SuperChainCCTPFed is Chairable {
         (bool success, ) = exchangeProxy.call(swapCallData);
         if (!success) revert SwapFailed();
 
-        uint256 dolaAmountAfter = DOLA.balanceOf(address(this));
+        uint256 dolaAmount = DOLA.balanceOf(address(this)) - dolaAmountBefore;
         if (
-            dolaAmountAfter - dolaAmountBefore <
+            dolaAmount <
             (usdcAmount *
                 (PRECISION - maxSlippageBpsUsdcToDola) *
                 DOLA_USDC_CONVERSION_MULTI) /
@@ -240,6 +255,7 @@ contract SuperChainCCTPFed is Chairable {
         ) {
             revert SlippageTooHigh();
         }
+        emit SwapUSDCtoDOLA(usdcAmount, dolaAmount);
     }
 
     /**
@@ -256,15 +272,16 @@ contract SuperChainCCTPFed is Chairable {
         uint256 usdcAmountBefore = USDC.balanceOf(address(this));
         (bool success, ) = exchangeProxy.call(swapCallData);
         if (!success) revert SwapFailed();
-        uint256 usdcAmountAfter = USDC.balanceOf(address(this));
+        uint256 usdcAmount = USDC.balanceOf(address(this)) - usdcAmountBefore;
         if (
-            usdcAmountAfter - usdcAmountBefore <
+            usdcAmount <
             (dolaAmount * (PRECISION - maxSlippageBpsDolaToUsdc)) /
                 DOLA_USDC_CONVERSION_MULTI /
                 PRECISION
         ) {
             revert SlippageTooHigh();
         }
+        emit SwapDOLAtoUSDC(dolaAmount, usdcAmount);
     }
 
     /**
@@ -273,6 +290,7 @@ contract SuperChainCCTPFed is Chairable {
      */
     function setExchangeProxy(address newExchangeProxy) external onlyGov {
         if (newExchangeProxy == address(0)) revert ZeroAddressParameter();
+        emit NewExchangeProxy(exchangeProxy, newExchangeProxy);
         exchangeProxy = newExchangeProxy;
     }
 
@@ -284,6 +302,10 @@ contract SuperChainCCTPFed is Chairable {
         uint256 newMaxSlippageBps
     ) external onlyGov {
         if (newMaxSlippageBps > 10000) revert MaxSlippageTooHigh();
+        emit NewMaxSlippageDolaToUsdc(
+            maxSlippageBpsDolaToUsdc,
+            newMaxSlippageBps
+        );
         maxSlippageBpsDolaToUsdc = newMaxSlippageBps;
     }
 
@@ -295,6 +317,10 @@ contract SuperChainCCTPFed is Chairable {
         uint256 newMaxSlippageBps
     ) external onlyGov {
         if (newMaxSlippageBps > 10000) revert MaxSlippageTooHigh();
+        emit NewMaxSlippageUsdcToDola(
+            maxSlippageBpsUsdcToDola,
+            newMaxSlippageBps
+        );
         maxSlippageBpsUsdcToDola = newMaxSlippageBps;
     }
 
@@ -305,6 +331,7 @@ contract SuperChainCCTPFed is Chairable {
     */
     function changeFarmer(address newFarmer) external onlyGov {
         if (newFarmer == address(0)) revert ZeroAddressParameter();
+        emit NewFarmer(farmer, newFarmer);
         farmer = newFarmer;
     }
 }
