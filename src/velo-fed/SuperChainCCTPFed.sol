@@ -42,12 +42,14 @@ contract SuperChainCCTPFed is Chairable {
     error SwapMoreDolaThanMinted();
     error SwapFailed();
     error ZeroAddressParameter();
+    error InvalidProxyAddress();
 
     uint256 public dolaSupply;
     uint256 public maxSlippageBpsDolaToUsdc;
     uint256 public maxSlippageBpsUsdcToDola;
-    address public exchangeProxy;
     address public farmer;
+
+    mapping(address => bool) public isExchangeProxy;
 
     uint256 public constant PRECISION = 10_000;
     uint256 public constant DOLA_USDC_CONVERSION_MULTI = 1e12;
@@ -85,8 +87,6 @@ contract SuperChainCCTPFed is Chairable {
     constructor(
         address gov_,
         address chair_,
-        address farmer_,
-        address exchangeProxy_,
         uint256 maxSlippageBpsDolaToUsdc_,
         uint256 maxSlippageBpsUsdcToDola_,
         address bridge_,
@@ -94,8 +94,6 @@ contract SuperChainCCTPFed is Chairable {
         address usdc_chain_,
         uint32 domain_
     ) Chairable(gov_, chair_) {
-        farmer = farmer_;
-        exchangeProxy = exchangeProxy_;
         maxSlippageBpsDolaToUsdc = maxSlippageBpsDolaToUsdc_;
         maxSlippageBpsUsdcToDola = maxSlippageBpsUsdcToDola_;
         BRIDGE = IL1ERC20Bridge(bridge_);
@@ -110,14 +108,17 @@ contract SuperChainCCTPFed is Chairable {
      * @param dolaToSwap Amount of DOLA to swap for USDC
      * @param useCCTP If true, will use CCTP to bridge USDC. If false, will use L1 bridge
      * @param swapCallData Data for calling the exchange proxy to swap DOLA for USDC
+     * @param exchangeProxy Address of the exchange proxy to use for the swap
      */
     function expansionAndSwap(
         uint256 dolaAmount,
         uint256 dolaToSwap,
         bool useCCTP,
-        bytes calldata swapCallData
+        bytes calldata swapCallData,
+        address exchangeProxy
     ) external onlyChair {
         if (dolaToSwap > dolaAmount) revert SwapMoreDolaThanMinted();
+        if(!isExchangeProxy[exchangeProxy]) revert InvalidProxyAddress();
 
         dolaSupply += dolaAmount;
         DOLA.mint(address(this), dolaAmount);
@@ -234,11 +235,14 @@ contract SuperChainCCTPFed is Chairable {
      * @dev Will revert if actual slippage > `maxSlippageBpsUsdcToDola`
      * @param usdcAmount Amount of USDC to be swapped to DOLA through the exchange proxy.
      * @param swapCallData Data for calling the exchange proxy to swap USDC for DOLA
+     * @param exchangeProxy Address of the exchange proxy to use for the swap
      */
     function swapUSDCtoDOLA(
         uint256 usdcAmount,
-        bytes calldata swapCallData
+        bytes calldata swapCallData,
+        address exchangeProxy
     ) external onlyChair {
+        if(!isExchangeProxy[exchangeProxy]) revert InvalidProxyAddress();
         USDC.approve(exchangeProxy, usdcAmount);
         uint256 dolaAmountBefore = DOLA.balanceOf(address(this));
 
@@ -263,11 +267,15 @@ contract SuperChainCCTPFed is Chairable {
      * @dev Will revert if actual slippage > `maxSlippageBpsDolaToUsdc`
      * @param dolaAmount Amount of DOLA to be swapped to USDC through the exchange proxy.
      * @param swapCallData Data for calling the exchange proxy to swap DOLA for USDC
+     * @param exchangeProxy Address of the exchange proxy to use for the swap
      */
     function swapDOLAtoUSDC(
         uint256 dolaAmount,
-        bytes calldata swapCallData
+        bytes calldata swapCallData,
+        address exchangeProxy
     ) external onlyChair {
+        if(!isExchangeProxy[exchangeProxy]) revert InvalidProxyAddress();
+        
         DOLA.approve(exchangeProxy, dolaAmount);
         uint256 usdcAmountBefore = USDC.balanceOf(address(this));
         (bool success, ) = exchangeProxy.call(swapCallData);
@@ -284,14 +292,18 @@ contract SuperChainCCTPFed is Chairable {
         emit SwapDOLAtoUSDC(dolaAmount, usdcAmount);
     }
 
-    /**
-     * @notice Set the new exchange proxy address
-     * @param newExchangeProxy Address of the new exchange proxy
-     */
-    function setExchangeProxy(address newExchangeProxy) external onlyGov {
-        if (newExchangeProxy == address(0)) revert ZeroAddressParameter();
-        emit NewExchangeProxy(exchangeProxy, newExchangeProxy);
-        exchangeProxy = newExchangeProxy;
+    /// @notice Allow an exchange proxy
+    /// @param _proxy The proxy address
+    function allowProxy(address _proxy) external onlyGov {
+        if (_proxy == address(0)) revert ZeroAddressParameter();
+        isExchangeProxy[_proxy] = true;
+    }
+
+    /// @notice Deny an exchange proxy
+    /// @param _proxy The proxy address
+    function denyProxy(address _proxy) external onlyGov {
+        if (_proxy == address(0)) revert ZeroAddressParameter();
+        isExchangeProxy[_proxy] = false;
     }
 
     /**

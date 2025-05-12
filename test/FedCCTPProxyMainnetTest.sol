@@ -44,8 +44,6 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         fed = new SuperChainCCTPFed(
             gov,
             chair,
-            address(0x69),
-            address(exchangeProxy),
             25,
             10,
             bridge,
@@ -58,6 +56,8 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         vm.startPrank(gov);
         DOLA.addMinter(address(fed));
         DOLA.mint(address(exchangeProxy), 1_000_000e18);
+        fed.allowProxy(address(exchangeProxy));
+        fed.changeFarmer(address(0x69));
         vm.stopPrank();
     }
 
@@ -81,7 +81,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
             dolaAmount / 2,
             dolaAmount / 2 / 1e12
         );
-        fed.expansionAndSwap(dolaAmount, dolaAmount / 2, true, swapData);
+        fed.expansionAndSwap(dolaAmount, dolaAmount / 2, true, swapData, address(exchangeProxy));
 
         assertEq(
             prevDolaBal + dolaAmount / 2,
@@ -102,7 +102,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
             dolaAmount / 2,
             dolaAmount / 2 / 1e12
         );
-        fed.expansionAndSwap(dolaAmount, dolaAmount / 2, false, swapData);
+        fed.expansionAndSwap(dolaAmount, dolaAmount / 2, false, swapData, address(exchangeProxy));
 
         uint estimatedUsdcAmount = dolaAmount / 2 / 1e12;
 
@@ -139,7 +139,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
             dolaToSwap,
             dolaToSwap / 1e12
         );
-        fed.expansionAndSwap(dolaAmount, dolaToSwap, false, swapData);
+        fed.expansionAndSwap(dolaAmount, dolaToSwap, false, swapData, address(exchangeProxy));
 
         uint estimatedUsdcAmount = dolaToSwap / 1e12;
 
@@ -175,7 +175,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
             dolaToSwap,
             dolaToSwap / 1e12
         );
-        fed.expansionAndSwap(dolaAmount, dolaToSwap, true, swapData);
+        fed.expansionAndSwap(dolaAmount, dolaToSwap, true, swapData, address(exchangeProxy));
 
         assertEq(
             prevDolaBal + dolaToBridge,
@@ -195,7 +195,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         vm.startPrank(chair);
 
         vm.expectRevert(SlippageTooHigh.selector);
-        fed.expansionAndSwap(dolaAmount, dolaAmount / 2, true, swapData);
+        fed.expansionAndSwap(dolaAmount, dolaAmount / 2, true, swapData, address(exchangeProxy));
     }
 
     function testL1_SwapDOLAtoUSDC() public {
@@ -211,7 +211,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
             dolaAmount,
             dolaAmount / 1e12
         );
-        fed.swapDOLAtoUSDC(dolaAmount, swapData);
+        fed.swapDOLAtoUSDC(dolaAmount, swapData, address(exchangeProxy));
 
         uint estimatedUsdcAmount = dolaAmount / 1e12;
 
@@ -243,7 +243,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         gibUSDC(address(fed), usdcAmount);
 
         vm.expectRevert(SlippageTooHigh.selector);
-        fed.swapUSDCtoDOLA(usdcAmount, swapData);
+        fed.swapUSDCtoDOLA(usdcAmount, swapData, address(exchangeProxy));
     }
 
     function testL1_SwapDOLAtoUSDC_Fails_IfSlippageRestraintUnmet() public {
@@ -257,7 +257,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         vm.startPrank(chair);
         gibDOLA(address(fed), dolaAmount);
         vm.expectRevert(SlippageTooHigh.selector);
-        fed.swapDOLAtoUSDC(dolaAmount, swapData);
+        fed.swapDOLAtoUSDC(dolaAmount, swapData, address(exchangeProxy));
     }
 
     function testL1_SwapUSDCtoDOLA() public {
@@ -275,7 +275,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
 
         gibUSDC(address(fed), usdcAmount);
 
-        fed.swapUSDCtoDOLA(usdcAmount, swapData);
+        fed.swapUSDCtoDOLA(usdcAmount, swapData, address(exchangeProxy));
 
         uint estimatedDolaAmount = usdcAmount * 1e12;
 
@@ -328,25 +328,42 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         );
     }
 
-    function testL1_setExchangeProxy() public {
+    function testL1_allowProxy() public {
         address newExchangeProxy = address(0x70);
-        assertEq(address(exchangeProxy), fed.exchangeProxy());
+        assertFalse(fed.isExchangeProxy(newExchangeProxy));
         vm.prank(gov);
-        fed.setExchangeProxy(address(newExchangeProxy));
-        assertEq(newExchangeProxy, fed.exchangeProxy());
+        fed.allowProxy(address(newExchangeProxy));
+        assertTrue(fed.isExchangeProxy(newExchangeProxy));
     }
 
-    function testL1_setExchangeProxy_fail_whenCalledByNonGov() public {
+    function testL1_allowProxy_fail_when_address_zero() public {
+        vm.prank(gov);
+        vm.expectRevert(ZeroAddressParameter.selector);
+        fed.allowProxy(address(0));
+    }
+
+    function testL1_denyProxy() public {
+        address newExchangeProxy = address(0x70);
+        vm.prank(gov);
+        fed.allowProxy(address(newExchangeProxy));
+        assertTrue(fed.isExchangeProxy(newExchangeProxy));
+
+        vm.prank(gov);
+        fed.denyProxy(address(newExchangeProxy));
+        assertFalse(fed.isExchangeProxy(newExchangeProxy));
+    }
+    function testL1_allowProxy_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
 
         vm.expectRevert(OnlyGov.selector);
-        fed.setExchangeProxy(address(0x70));
+        fed.allowProxy(address(0x70));
     }
 
-    function testL1_setExchangeProxy_fail_when_address_zero() public {
-        vm.prank(gov);
-        vm.expectRevert(ZeroAddressParameter.selector);
-        fed.setExchangeProxy(address(0));
+    function testL1_denyProxy_fail_whenCalledByNonGov() public {
+        vm.startPrank(user);
+
+        vm.expectRevert(OnlyGov.selector);
+        fed.denyProxy(address(0x70));
     }
 
     function testL1_setMaxSlippageDolaToUsdc_fail_whenCalledByNonGov() public {
@@ -374,14 +391,14 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         vm.startPrank(user);
         bytes memory swapData;
         vm.expectRevert(OnlyChair.selector);
-        fed.swapDOLAtoUSDC(1e18, swapData);
+        fed.swapDOLAtoUSDC(1e18, swapData, address(exchangeProxy));
     }
 
     function testL1_swapUSDCtoDOLA_fail_whenCalledByNonChair() public {
         vm.startPrank(user);
         bytes memory swapData;
         vm.expectRevert(OnlyChair.selector);
-        fed.swapUSDCtoDOLA(1e6, swapData);
+        fed.swapUSDCtoDOLA(1e6, swapData, address(exchangeProxy));
     }
 
     function testL1_contractAll_fail_whenCalledByNonChair() public {

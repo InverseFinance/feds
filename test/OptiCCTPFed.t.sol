@@ -12,7 +12,7 @@ contract OptiCCTPFedTest is FedCCTPProxyMainnetTest {
     uint32 public constant OPTIMISM_CCTP_DOMAIN = 2;
 
     function setUp() public {
-        vm.createSelectFork(vm.rpcUrl("mainnet"), 21230271);
+        vm.createSelectFork(vm.rpcUrl("mainnet"));
 
         initialize(optiBridge, DOLA_OPTI, USDC_OPTI, OPTIMISM_CCTP_DOMAIN);
     }
