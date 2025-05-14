@@ -70,7 +70,7 @@ contract FedProxyOdosMainnetTest is Test {
 
         vm.startPrank(gov);
         DOLA.addMinter(address(fed));
-        fed.allowProxy(ODOS);
+        fed.setExchangeProxy(ODOS, true);
         fed.changeFarmer(address(0x69));
         vm.stopPrank();
     }

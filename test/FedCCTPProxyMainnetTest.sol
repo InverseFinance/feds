@@ -5,7 +5,7 @@ import {IERC20} from "src/interfaces/IERC20.sol";
 import {IDola} from "src/interfaces/velo/IDola.sol";
 import {MockExchangeProxy} from "test/mocks/MockExchangeProxy.sol";
 import {Test} from "forge-std/Test.sol";
-import {SuperChainCCTPFed} from "src/velo-fed/SuperChainCCTPFed.sol";
+import {SuperChainCCTPFed, IChainlinkPriceFeed} from "src/velo-fed/SuperChainCCTPFed.sol";
 
 abstract contract FedCCTPProxyMainnetTest is Test {
     //Tokens
@@ -31,6 +31,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
     error OnlyGov();
     error SlippageTooHigh();
     error ZeroAddressParameter();
+    error DepegThresholdTooHigh();
 
     function initialize(
         address bridge,
@@ -56,7 +57,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         vm.startPrank(gov);
         DOLA.addMinter(address(fed));
         DOLA.mint(address(exchangeProxy), 1_000_000e18);
-        fed.allowProxy(address(exchangeProxy));
+        fed.setExchangeProxy(address(exchangeProxy), true);
         fed.changeFarmer(address(0x69));
         vm.stopPrank();
     }
@@ -198,6 +199,21 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         fed.expansionAndSwap(dolaAmount, dolaAmount / 2, true, swapData, address(exchangeProxy));
     }
 
+    function testL1_ExpansionAndSwap_Fail_If_USDC_Depeg() public {
+        _mockUSDCFeed_latestAnswer();
+
+        bytes memory swapData = abi.encodeWithSelector(
+            MockExchangeProxy.swapDolaIn.selector,
+            address(USDC),
+            dolaAmount / 2,
+            (dolaAmount / 2) / 1e12
+        );
+        vm.startPrank(chair);
+
+        vm.expectRevert(DepegThresholdTooHigh.selector);
+        fed.expansionAndSwap(dolaAmount, dolaAmount / 2, false, swapData, address(exchangeProxy));
+    }
+
     function testL1_SwapDOLAtoUSDC() public {
         vm.startPrank(chair);
 
@@ -296,6 +312,84 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         );
     }
 
+    function testL1_SwapUSDCtoDOLA_fail_if_USDC_Depeg() public {
+        _mockUSDCFeed_latestAnswer();
+
+        vm.startPrank(chair);
+
+        gibUSDC(address(fed), usdcAmount);
+        bytes memory swapData = abi.encodeWithSelector(
+            MockExchangeProxy.swapDolaOut.selector,
+            address(USDC),
+            usdcAmount,
+            usdcAmount * 1e12
+        );
+
+        vm.expectRevert(DepegThresholdTooHigh.selector);
+        fed.swapUSDCtoDOLA(usdcAmount, swapData, address(exchangeProxy));
+    }
+
+    
+
+    function testL1_SwapDOLAtoUSDC_fail_if_USDC_Depeg() public {
+        _mockUSDCFeed_latestAnswer();
+        
+        vm.startPrank(chair);
+        gibDOLA(address(fed), dolaAmount);
+        bytes memory swapData = abi.encodeWithSelector(
+            MockExchangeProxy.swapDolaIn.selector,
+            address(USDC),
+            dolaAmount,
+            dolaAmount / 1e12
+        );
+
+        vm.expectRevert(DepegThresholdTooHigh.selector);
+        fed.swapDOLAtoUSDC(dolaAmount, swapData, address(exchangeProxy));
+    }
+
+    function testL1_SwapDOLAtoUSDC_succeed_if_USDC_Depeg_after_DepegThreshold_update() public {
+        _mockUSDCFeed_latestAnswer();
+
+        gibDOLA(address(fed), dolaAmount);
+        bytes memory swapData = abi.encodeWithSelector(
+            MockExchangeProxy.swapDolaIn.selector,
+            address(USDC),
+            dolaAmount,
+            dolaAmount / 1e12
+        );
+        vm.startPrank(chair);
+        vm.expectRevert(DepegThresholdTooHigh.selector);
+        fed.swapDOLAtoUSDC(dolaAmount, swapData, address(exchangeProxy));
+
+        vm.stopPrank();
+        
+        vm.prank(gov);
+        fed.setDepegThresholdBps(8500);
+        
+        vm.prank(chair);
+        fed.swapDOLAtoUSDC(dolaAmount, swapData, address(exchangeProxy));
+    }
+
+    function testL1_setDepegThresholdBps() public {
+        vm.startPrank(gov);
+        uint256 newDepegThreshold = 1000;
+        fed.setDepegThresholdBps(newDepegThreshold);
+        assertEq(fed.depegThresholdBps(), newDepegThreshold);
+    }
+
+    function testL1_setDepegThresholdBps_fail_whenCalledByNonGov() public {
+        vm.startPrank(user);
+
+        vm.expectRevert(OnlyGov.selector);
+        fed.setDepegThresholdBps(1000);
+    }
+
+    function testL1_setDepegThresholdBps_fail_whenTooHigh() public {
+        vm.startPrank(gov);
+
+        vm.expectRevert(DepegThresholdTooHigh.selector);
+        fed.setDepegThresholdBps(10001);
+    }
     function testL1_changeChair_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
 
@@ -328,42 +422,35 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         );
     }
 
-    function testL1_allowProxy() public {
+    function testL1_setExchangeProxy_allow() public {
         address newExchangeProxy = address(0x70);
         assertFalse(fed.isExchangeProxy(newExchangeProxy));
         vm.prank(gov);
-        fed.allowProxy(address(newExchangeProxy));
+        fed.setExchangeProxy(address(newExchangeProxy), true);
         assertTrue(fed.isExchangeProxy(newExchangeProxy));
     }
 
-    function testL1_allowProxy_fail_when_address_zero() public {
+    function testL1_setExchangeProxy_fail_when_address_zero() public {
         vm.prank(gov);
         vm.expectRevert(ZeroAddressParameter.selector);
-        fed.allowProxy(address(0));
+        fed.setExchangeProxy(address(0), true);
     }
 
-    function testL1_denyProxy() public {
+    function testL1_setExchangeProxy_deny() public {
         address newExchangeProxy = address(0x70);
         vm.prank(gov);
-        fed.allowProxy(address(newExchangeProxy));
+        fed.setExchangeProxy(address(newExchangeProxy), true);
         assertTrue(fed.isExchangeProxy(newExchangeProxy));
 
         vm.prank(gov);
-        fed.denyProxy(address(newExchangeProxy));
+        fed.setExchangeProxy(address(newExchangeProxy), false);
         assertFalse(fed.isExchangeProxy(newExchangeProxy));
     }
-    function testL1_allowProxy_fail_whenCalledByNonGov() public {
+    function testL1_setExchangeProxy_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
 
         vm.expectRevert(OnlyGov.selector);
-        fed.allowProxy(address(0x70));
-    }
-
-    function testL1_denyProxy_fail_whenCalledByNonGov() public {
-        vm.startPrank(user);
-
-        vm.expectRevert(OnlyGov.selector);
-        fed.denyProxy(address(0x70));
+        fed.setExchangeProxy(address(0x70), true);
     }
 
     function testL1_setMaxSlippageDolaToUsdc_fail_whenCalledByNonGov() public {
@@ -435,6 +522,13 @@ abstract contract FedCCTPProxyMainnetTest is Test {
 
     // My loyal helpers
 
+    function _mockUSDCFeed_latestAnswer() internal {
+        vm.mockCall(
+            address(fed.USDC_FEED()),
+            abi.encodeWithSelector(IChainlinkPriceFeed.latestAnswer.selector),
+            abi.encode(10 ** fed.USDC_FEED().decimals() * 9 / 10)
+        );
+    }
     function gibDOLA(address _user, uint _amount) internal {
         bytes32 slot;
         assembly {

@@ -31,6 +31,11 @@ interface ICCTP {
     ) external returns (uint64 _nonce);
 }
 
+interface IChainlinkPriceFeed {
+    function decimals() external view returns (uint8);
+    function latestAnswer() external view returns (int256);
+}
+
 /**
  * @title SuperChainCCTPFed
  * @notice A generic contract for SuperChain CCTP Feds
@@ -43,10 +48,12 @@ contract SuperChainCCTPFed is Chairable {
     error SwapFailed();
     error ZeroAddressParameter();
     error InvalidProxyAddress();
+    error DepegThresholdTooHigh();
 
     uint256 public dolaSupply;
     uint256 public maxSlippageBpsDolaToUsdc;
     uint256 public maxSlippageBpsUsdcToDola;
+    uint256 public depegThresholdBps = 9800; // 0.98 USDC/USD
     address public farmer;
 
     mapping(address => bool) public isExchangeProxy;
@@ -60,6 +67,7 @@ contract SuperChainCCTPFed is Chairable {
         IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ICCTP public constant CCTP =
         ICCTP(0xBd3fa81B58Ba92a82136038B25aDec7066af3155);
+    IChainlinkPriceFeed public constant USDC_FEED = IChainlinkPriceFeed(0x5B4e043d614809A4b240Ed4Be7D1589f7871a749);
 
     IL1ERC20Bridge public immutable BRIDGE;
     address public immutable DOLA_CHAIN;
@@ -71,7 +79,7 @@ contract SuperChainCCTPFed is Chairable {
     event NewFarmer(address indexed oldFarmer, address indexed newFarmer);
     event NewExchangeProxy(
         address indexed oldExchangeProxy,
-        address indexed newExchangeProxy
+        bool isAllowed
     );
     event NewMaxSlippageDolaToUsdc(
         uint256 oldMaxSlippageBps,
@@ -81,6 +89,7 @@ contract SuperChainCCTPFed is Chairable {
         uint256 oldMaxSlippageBps,
         uint256 newMaxSlippageBps
     );
+    event NewDepegThresholdBps(uint256 newDepegThresholdBps);
     event SwapDOLAtoUSDC(uint256 dolaAmount, uint256 usdcAmount);
     event SwapUSDCtoDOLA(uint256 usdcAmount, uint256 dolaAmount);
 
@@ -119,6 +128,7 @@ contract SuperChainCCTPFed is Chairable {
     ) external onlyChair {
         if (dolaToSwap > dolaAmount) revert SwapMoreDolaThanMinted();
         if(!isExchangeProxy[exchangeProxy]) revert InvalidProxyAddress();
+        _revertIfBelowDepegThreshold();
 
         dolaSupply += dolaAmount;
         DOLA.mint(address(this), dolaAmount);
@@ -243,6 +253,8 @@ contract SuperChainCCTPFed is Chairable {
         address exchangeProxy
     ) external onlyChair {
         if(!isExchangeProxy[exchangeProxy]) revert InvalidProxyAddress();
+        _revertIfBelowDepegThreshold();
+
         USDC.approve(exchangeProxy, usdcAmount);
         uint256 dolaAmountBefore = DOLA.balanceOf(address(this));
 
@@ -275,7 +287,8 @@ contract SuperChainCCTPFed is Chairable {
         address exchangeProxy
     ) external onlyChair {
         if(!isExchangeProxy[exchangeProxy]) revert InvalidProxyAddress();
-        
+        _revertIfBelowDepegThreshold();
+
         DOLA.approve(exchangeProxy, dolaAmount);
         uint256 usdcAmountBefore = USDC.balanceOf(address(this));
         (bool success, ) = exchangeProxy.call(swapCallData);
@@ -292,20 +305,32 @@ contract SuperChainCCTPFed is Chairable {
         emit SwapDOLAtoUSDC(dolaAmount, usdcAmount);
     }
 
-    /// @notice Allow an exchange proxy
-    /// @param _proxy The proxy address
-    function allowProxy(address _proxy) external onlyGov {
-        if (_proxy == address(0)) revert ZeroAddressParameter();
-        isExchangeProxy[_proxy] = true;
+    function _revertIfBelowDepegThreshold() internal view {
+        int256 usdcPrice = USDC_FEED.latestAnswer();
+        uint8 decimals = USDC_FEED.decimals();
+        if (usdcPrice < int256(10 ** decimals * depegThresholdBps / 10000)) revert DepegThresholdTooHigh();
     }
 
-    /// @notice Deny an exchange proxy
-    /// @param _proxy The proxy address
-    function denyProxy(address _proxy) external onlyGov {
+    /**
+     * @notice Governance only function for allowing or disallowing an exchange proxy to be used for swaps
+     * @param _proxy The address of the exchange proxy
+     * @param _isAllowed Whether the exchange proxy is allowed to be used for swaps
+     */
+    function setExchangeProxy(address _proxy, bool _isAllowed) external onlyGov {
         if (_proxy == address(0)) revert ZeroAddressParameter();
-        isExchangeProxy[_proxy] = false;
+        isExchangeProxy[_proxy] = _isAllowed;
+        emit NewExchangeProxy(_proxy, _isAllowed);
     }
 
+    /**
+     * @notice Governance only function for setting acceptable slippage when swapping DOLA -> USDC
+     * @param newDepegThresholdBps The new depeg threshold in bps. 1 = 0.01%
+     */
+    function setDepegThresholdBps(uint256 newDepegThresholdBps) external onlyGov {
+        if (newDepegThresholdBps > 10000) revert DepegThresholdTooHigh();
+        depegThresholdBps = newDepegThresholdBps;
+        emit NewDepegThresholdBps(newDepegThresholdBps);
+    }
     /**
      * @notice Governance only function for setting acceptable slippage when swapping DOLA -> USDC
      * @param newMaxSlippageBps The new maximum allowed loss for DOLA -> USDC swaps. 1 = 0.01%
