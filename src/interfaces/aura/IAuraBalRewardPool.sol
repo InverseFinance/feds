@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.13;
+pragma solidity ^0.8.13;
 
 import "./IAuraLocker.sol";
 
@@ -7,7 +7,7 @@ interface IAuraBalRewardPool {
     function auraLocker() external view returns (IAuraLocker);
 
     function rewardToken() external view returns (address);
-    
+
     function stakingToken() external view returns (address);
 
     function totalSupply() external view returns (uint256);
@@ -24,10 +24,13 @@ interface IAuraBalRewardPool {
 
     function stakeAll() external returns (bool);
 
-    function stakeFor(address _for, uint256 _amount) external  returns (bool);
+    function stakeFor(address _for, uint256 _amount) external returns (bool);
 
-    function withdrawAndUnwrap(uint256 amount, bool claim) external returns (bool);
-    
+    function withdrawAndUnwrap(
+        uint256 amount,
+        bool claim
+    ) external returns (bool);
+
     function withdrawAllAndUnwrap(bool claim) external returns (bool);
 
     /**

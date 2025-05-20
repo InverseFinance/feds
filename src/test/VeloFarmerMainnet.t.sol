@@ -2,24 +2,29 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
-import { IERC20 } from "../interfaces/IERC20.sol";
-import { IDola } from "../interfaces/velo/IDola.sol";
+import {IERC20} from "../interfaces/IERC20.sol";
+import {IDola} from "../interfaces/velo/IDola.sol";
 import "../interfaces/velo/IL2CrossDomainMessenger.sol";
-import { VeloFarmer, IRouter, IGauge} from "../velo-fed/VeloFarmer.sol";
-import {OptiFed} from "../velo-fed/OptiFed.sol";
+import {VeloFarmer, IRouter, IGauge} from "../velo-fed/VeloFarmer.sol";
 
 contract VeloFarmerMainnetTest is Test {
-    IRouter public router = IRouter(payable(0xa132DAB612dB5cB9fC9Ac426A0Cc215A3423F9c9));
-    IGauge public dolaGauge = IGauge(0xAFD2c84b9d1cd50E7E18a55e419749A6c9055E1F);
+    IRouter public router =
+        IRouter(payable(0xa132DAB612dB5cB9fC9Ac426A0Cc215A3423F9c9));
+    IGauge public dolaGauge =
+        IGauge(0xAFD2c84b9d1cd50E7E18a55e419749A6c9055E1F);
     IDola public DOLA = IDola(0x8aE125E8653821E851F12A49F7765db9a9ce7384);
     IERC20 public VELO = IERC20(0x3c8B650257cFb5f272f799F5e2b4e65093a11a05);
     IERC20 public USDC = IERC20(0x7F5c764cBc14f9669B88837ca1490cCa17c31607);
-    address public l2optiBridgeAddress = 0x4200000000000000000000000000000000000010;
-    address public dolaUsdcPoolAddy = 0x6C5019D345Ec05004A7E7B0623A91a0D9B8D590d;
+    address public l2optiBridgeAddress =
+        0x4200000000000000000000000000000000000010;
+    address public dolaUsdcPoolAddy =
+        0x6C5019D345Ec05004A7E7B0623A91a0D9B8D590d;
     address public veloTokenAddr = 0x3c8B650257cFb5f272f799F5e2b4e65093a11a05;
     address public optiFedAddress = address(0xA);
-    IL2CrossDomainMessenger public l2CrossDomainMessenger = IL2CrossDomainMessenger(0x4200000000000000000000000000000000000007);
-    address public l1CrossDomainMessenger = 0x36BDE71C97B33Cc4729cf772aE268934f7AB70B2;
+    IL2CrossDomainMessenger public l2CrossDomainMessenger =
+        IL2CrossDomainMessenger(0x4200000000000000000000000000000000000007);
+    address public l1CrossDomainMessenger =
+        0x36BDE71C97B33Cc4729cf772aE268934f7AB70B2;
     //address public l1CrossDomainMessenger = 0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1;
     address public treasury = 0xa283139017a2f5BAdE8d8e25412C600055D318F8;
 
@@ -50,22 +55,48 @@ contract VeloFarmerMainnetTest is Test {
     error LiquiditySlippageTooHigh();
 
     function relayGovMessage(bytes memory message) public {
-        l2CrossDomainMessenger.relayMessage(address(fed), gov, message, nonce++);
+        l2CrossDomainMessenger.relayMessage(
+            address(fed),
+            gov,
+            message,
+            nonce++
+        );
     }
 
     function relayChairMessage(bytes memory message) public {
-        l2CrossDomainMessenger.relayMessage(address(fed), chair, message, nonce++);
+        l2CrossDomainMessenger.relayMessage(
+            address(fed),
+            chair,
+            message,
+            nonce++
+        );
     }
 
     function relayUserMessage(bytes memory message) public {
-        l2CrossDomainMessenger.relayMessage(address(fed), user, message, nonce++);
+        l2CrossDomainMessenger.relayMessage(
+            address(fed),
+            user,
+            message,
+            nonce++
+        );
     }
-    
+
     function setUp() public {
         vm.label(veloTokenAddr, "VELO");
 
         vm.startPrank(chair);
-        fed = new VeloFarmer(gov, chair, l2chair, treasury, guardian, l2optiBridgeAddress, optiFedAddress, maxSlippageBpsDolaToUsdc, maxSlippageBpsUsdcToDola, maxSlippageLiquidity);
+        fed = new VeloFarmer(
+            gov,
+            chair,
+            l2chair,
+            treasury,
+            guardian,
+            l2optiBridgeAddress,
+            optiFedAddress,
+            maxSlippageBpsDolaToUsdc,
+            maxSlippageBpsUsdcToDola,
+            maxSlippageLiquidity
+        );
         vm.makePersistent(address(fed));
 
         vm.stopPrank();
@@ -80,7 +111,9 @@ contract VeloFarmerMainnetTest is Test {
         uint initialVelo = VELO.balanceOf(address(treasury));
 
         vm.startPrank(l1CrossDomainMessenger);
-        relayGovMessage(abi.encodeWithSignature("setMaxSlippageLiquidity(uint256)", 5000));
+        relayGovMessage(
+            abi.encodeWithSignature("setMaxSlippageLiquidity(uint256)", 5000)
+        );
         vm.stopPrank();
 
         vm.startPrank(l2chair);
@@ -90,7 +123,11 @@ contract VeloFarmerMainnetTest is Test {
         vm.warp(block.timestamp + (10_000 * 60));
         fed.claimVeloRewards();
 
-        assertGt(VELO.balanceOf(address(treasury)), initialVelo, "No rewards claimed");
+        assertGt(
+            VELO.balanceOf(address(treasury)),
+            initialVelo,
+            "No rewards claimed"
+        );
     }
 
     function testL2_SwapAndClaimVeloRewards() public {
@@ -100,7 +137,9 @@ contract VeloFarmerMainnetTest is Test {
         uint initialVelo = VELO.balanceOf(address(treasury));
 
         vm.startPrank(l1CrossDomainMessenger);
-        relayGovMessage(abi.encodeWithSignature("setMaxSlippageLiquidity(uint256)", 5000));
+        relayGovMessage(
+            abi.encodeWithSignature("setMaxSlippageLiquidity(uint256)", 5000)
+        );
         vm.stopPrank();
 
         vm.startPrank(l2chair);
@@ -109,7 +148,11 @@ contract VeloFarmerMainnetTest is Test {
         vm.warp(block.timestamp + (10_000 * 60));
         fed.claimVeloRewards();
 
-        assertGt(VELO.balanceOf(address(treasury)), initialVelo, "No rewards claimed");
+        assertGt(
+            VELO.balanceOf(address(treasury)),
+            initialVelo,
+            "No rewards claimed"
+        );
     }
 
     function testL2_SwapAndClaimRewards() public {
@@ -119,7 +162,9 @@ contract VeloFarmerMainnetTest is Test {
         uint initialVelo = VELO.balanceOf(address(treasury));
 
         vm.startPrank(l1CrossDomainMessenger);
-        relayGovMessage(abi.encodeWithSignature("setMaxSlippageLiquidity(uint256)", 5000));
+        relayGovMessage(
+            abi.encodeWithSignature("setMaxSlippageLiquidity(uint256)", 5000)
+        );
         vm.stopPrank();
 
         vm.startPrank(l2chair);
@@ -130,10 +175,16 @@ contract VeloFarmerMainnetTest is Test {
         addr[0] = 0x3c8B650257cFb5f272f799F5e2b4e65093a11a05;
         fed.claimRewards(addr);
 
-        assertGt(VELO.balanceOf(address(treasury)), initialVelo, "No rewards claimed");
+        assertGt(
+            VELO.balanceOf(address(treasury)),
+            initialVelo,
+            "No rewards claimed"
+        );
     }
 
-    function testL2_Deposit_Succeeds_WhenSlippageLtMaxLiquiditySlippage() public {
+    function testL2_Deposit_Succeeds_WhenSlippageLtMaxLiquiditySlippage()
+        public
+    {
         gibDOLA(address(fed), dolaAmount);
         gibUSDC(address(fed), usdcAmount * 2);
 
@@ -143,14 +194,22 @@ contract VeloFarmerMainnetTest is Test {
 
         fed.depositAll();
 
-        assertGt(dolaGauge.balanceOf(address(fed)), initialPoolTokens, "depositAll failed");
+        assertGt(
+            dolaGauge.balanceOf(address(fed)),
+            initialPoolTokens,
+            "depositAll failed"
+        );
     }
 
-    function testL2_SwapDolaToUsdc_Fails_WhenSlippageGtMaxDolaToUsdcSlippage() public {
+    function testL2_SwapDolaToUsdc_Fails_WhenSlippageGtMaxDolaToUsdcSlippage()
+        public
+    {
         gibDOLA(address(fed), dolaAmount * 3);
 
         vm.startPrank(l1CrossDomainMessenger);
-        relayGovMessage(abi.encodeWithSignature("setMaxSlippageDolaToUsdc(uint256)", 100));
+        relayGovMessage(
+            abi.encodeWithSignature("setMaxSlippageDolaToUsdc(uint256)", 100)
+        );
         vm.stopPrank();
 
         vm.startPrank(l2chair);
@@ -158,18 +217,30 @@ contract VeloFarmerMainnetTest is Test {
         fed.swapDOLAtoUSDC(dolaAmount);
     }
 
-    function testL2_SwapUsdcToDola_Fails_WhenSlippageGtMaxUsdcToDolaSlippage() public {
+    function testL2_SwapUsdcToDola_Fails_WhenSlippageGtMaxUsdcToDolaSlippage()
+        public
+    {
         gibUSDC(address(fed), usdcAmount * 3);
 
         uint usdcToSwap = usdcAmount * 3;
         gibUSDC(address(user), usdcToSwap);
         vm.startPrank(user);
         USDC.approve(address(router), type(uint).max);
-        router.swapExactTokensForTokensSimple(usdcToSwap, 0, address(USDC), address(DOLA), true, address(user), block.timestamp);
+        router.swapExactTokensForTokensSimple(
+            usdcToSwap,
+            0,
+            address(USDC),
+            address(DOLA),
+            true,
+            address(user),
+            block.timestamp
+        );
         vm.stopPrank();
 
         vm.startPrank(l1CrossDomainMessenger);
-        relayGovMessage(abi.encodeWithSignature("setMaxSlippageUsdcToDola(uint256)", 100));
+        relayGovMessage(
+            abi.encodeWithSignature("setMaxSlippageUsdcToDola(uint256)", 100)
+        );
         vm.stopPrank();
 
         vm.startPrank(l2chair);
@@ -184,18 +255,23 @@ contract VeloFarmerMainnetTest is Test {
         vm.stopPrank();
 
         vm.startPrank(l1CrossDomainMessenger);
-        relayGovMessage(abi.encodeWithSignature("setMaxSlippageLiquidity(uint256)", 50));
+        relayGovMessage(
+            abi.encodeWithSignature("setMaxSlippageLiquidity(uint256)", 50)
+        );
         vm.stopPrank();
 
         vm.startPrank(l2chair);
         fed.depositAll();
         fed.withdrawLiquidity(dolaAmount);
-        
-        fed.withdrawToL1OptiFed(DOLA.balanceOf(address(fed)), USDC.balanceOf(address(fed)));
+
+        fed.withdrawToL1OptiFed(
+            DOLA.balanceOf(address(fed)),
+            USDC.balanceOf(address(fed))
+        );
     }
 
     function testL2_Withdraw_FromL1Chair(uint amountDola) public {
-        amountDola = bound(amountDola, 10_000e18, 1_000_000_000e18);    
+        amountDola = bound(amountDola, 10_000e18, 1_000_000_000e18);
 
         vm.startPrank(l2optiBridgeAddress);
         DOLA.mint(address(fed), amountDola);
@@ -203,26 +279,52 @@ contract VeloFarmerMainnetTest is Test {
         vm.stopPrank();
 
         vm.startPrank(l1CrossDomainMessenger);
-        relayGovMessage(abi.encodeWithSignature("setMaxSlippageLiquidity(uint256)", 4000));
+        relayGovMessage(
+            abi.encodeWithSignature("setMaxSlippageLiquidity(uint256)", 4000)
+        );
 
         uint prevLiquidity = dolaGauge.balanceOf(address(fed));
 
         relayChairMessage(abi.encodeWithSignature("depositAll()"));
 
-        assertLt(prevLiquidity, dolaGauge.balanceOf(address(fed)), "depositAll failed");
+        assertLt(
+            prevLiquidity,
+            dolaGauge.balanceOf(address(fed)),
+            "depositAll failed"
+        );
         prevLiquidity = dolaGauge.balanceOf(address(fed));
 
-        relayChairMessage(abi.encodeWithSignature("withdrawLiquidity(uint256)", amountDola));
+        relayChairMessage(
+            abi.encodeWithSignature("withdrawLiquidity(uint256)", amountDola)
+        );
 
-        assertGt(prevLiquidity, dolaGauge.balanceOf(address(fed)), "withdrawLiquidity failed");
+        assertGt(
+            prevLiquidity,
+            dolaGauge.balanceOf(address(fed)),
+            "withdrawLiquidity failed"
+        );
 
         uint prevDola = DOLA.balanceOf(address(fed));
         uint prevUsdc = USDC.balanceOf(address(fed));
 
-        relayChairMessage(abi.encodeWithSignature("withdrawToL1OptiFed(uint256,uint256)", DOLA.balanceOf(address(fed)), USDC.balanceOf(address(fed))));
+        relayChairMessage(
+            abi.encodeWithSignature(
+                "withdrawToL1OptiFed(uint256,uint256)",
+                DOLA.balanceOf(address(fed)),
+                USDC.balanceOf(address(fed))
+            )
+        );
 
-        assertGt(prevDola, DOLA.balanceOf(address(fed)), "Withdraw to L1 failed");
-        assertGt(prevUsdc, USDC.balanceOf(address(fed)), "Withdraw to L1 failed");
+        assertGt(
+            prevDola,
+            DOLA.balanceOf(address(fed)),
+            "Withdraw to L1 failed"
+        );
+        assertGt(
+            prevUsdc,
+            USDC.balanceOf(address(fed)),
+            "Withdraw to L1 failed"
+        );
     }
 
     function testL2_WithdrawAndSwap() public {
@@ -235,7 +337,8 @@ contract VeloFarmerMainnetTest is Test {
         fed.depositAll();
 
         uint dolaBal = DOLA.balanceOf(address(fed));
-        uint usdcBal = USDC.balanceOf(address(fed)) * fed.DOLA_USDC_CONVERSION_MULTI();
+        uint usdcBal = USDC.balanceOf(address(fed)) *
+            fed.DOLA_USDC_CONVERSION_MULTI();
         uint withdrawAmount = dolaAmount - dolaBal - usdcBal;
 
         fed.withdrawLiquidityAndSwapToDOLA(withdrawAmount);
@@ -247,10 +350,22 @@ contract VeloFarmerMainnetTest is Test {
         address prevChair = fed.chair();
 
         bytes memory message = abi.encodeWithSignature("resign()");
-        l2CrossDomainMessenger.relayMessage(address(fed), address(0x999), message, nonce++);
+        l2CrossDomainMessenger.relayMessage(
+            address(fed),
+            address(0x999),
+            message,
+            nonce++
+        );
 
-        assertEq(prevChair, fed.chair(), "onlyChair function did not revert properly");
-        assertTrue(fed.chair() != address(0), "onlyChair function did not revert properly");
+        assertEq(
+            prevChair,
+            fed.chair(),
+            "onlyChair function did not revert properly"
+        );
+        assertTrue(
+            fed.chair() != address(0),
+            "onlyChair function did not revert properly"
+        );
     }
 
     function testL2_resign_fromChair() public {
@@ -259,10 +374,22 @@ contract VeloFarmerMainnetTest is Test {
         address prevChair = fed.chair();
 
         bytes memory message = abi.encodeWithSignature("resign()");
-        l2CrossDomainMessenger.relayMessage(address(fed), address(chair), message, nonce++);
+        l2CrossDomainMessenger.relayMessage(
+            address(fed),
+            address(chair),
+            message,
+            nonce++
+        );
 
-        assertTrue(prevChair != fed.chair(), "onlyChair function did not revert properly");
-        assertEq(fed.chair(), address(0), "onlyChair function did not revert properly");
+        assertTrue(
+            prevChair != fed.chair(),
+            "onlyChair function did not revert properly"
+        );
+        assertEq(
+            fed.chair(),
+            address(0),
+            "onlyChair function did not revert properly"
+        );
     }
 
     function testL2_resign_fromL2Chair() public {
@@ -271,8 +398,15 @@ contract VeloFarmerMainnetTest is Test {
         address prevChair = fed.l2chair();
         fed.resign();
 
-        assertTrue(prevChair != fed.l2chair(), "onlyChair function did not revert properly");
-        assertEq(fed.l2chair(), address(0), "onlyChair function did not revert properly");
+        assertTrue(
+            prevChair != fed.l2chair(),
+            "onlyChair function did not revert properly"
+        );
+        assertEq(
+            fed.l2chair(),
+            address(0),
+            "onlyChair function did not revert properly"
+        );
     }
 
     function testL2_resign_fail_whenCalledByNonChair() public {
@@ -312,14 +446,20 @@ contract VeloFarmerMainnetTest is Test {
 
     function testL2_govChange() public {
         vm.startPrank(l1CrossDomainMessenger);
-        relayGovMessage(abi.encodeWithSignature("setPendingGov(address)", user));
+        relayGovMessage(
+            abi.encodeWithSignature("setPendingGov(address)", user)
+        );
 
         relayUserMessage(abi.encodeWithSignature("claimGov()"));
 
         assertEq(fed.gov(), user, "user failed to be set as gov");
-        assertEq(fed.pendingGov(), address(0), "pendingGov failed to be set as 0 address");
+        assertEq(
+            fed.pendingGov(),
+            address(0),
+            "pendingGov failed to be set as 0 address"
+        );
     }
-    
+
     function testL2_changeChair_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
 
