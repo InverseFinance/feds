@@ -325,7 +325,7 @@ contract SuperChainCCTPFed is Chairable {
     }
 
     /**
-     * @notice Governance only function for setting acceptable slippage when swapping DOLA -> USDC
+     * @notice Governance only function for setting acceptable depeg threshold
      * @param newDepegThreshold The new depeg price threshold. (18 decimals)
      */
     function setDepegThreshold(uint256 newDepegThreshold) external onlyGov {
