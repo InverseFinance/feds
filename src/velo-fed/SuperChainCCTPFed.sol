@@ -48,12 +48,13 @@ contract SuperChainCCTPFed is Chairable {
     error SwapFailed();
     error ZeroAddressParameter();
     error InvalidProxyAddress();
-    error DepegThresholdTooHigh();
+    error InvalidDepegThreshold();
+    error BelowDepegThreshold();
 
     uint256 public dolaSupply;
     uint256 public maxSlippageBpsDolaToUsdc;
     uint256 public maxSlippageBpsUsdcToDola;
-    uint256 public depegThresholdBps = 9800; // 0.98 USDC/USD
+    uint256 public depegThreshold = 0.98e18; // 0.98 USDC/USD
     address public farmer;
 
     mapping(address => bool) public isExchangeProxy;
@@ -67,7 +68,7 @@ contract SuperChainCCTPFed is Chairable {
         IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ICCTP public constant CCTP =
         ICCTP(0xBd3fa81B58Ba92a82136038B25aDec7066af3155);
-    IChainlinkPriceFeed public constant USDC_FEED = IChainlinkPriceFeed(0x5B4e043d614809A4b240Ed4Be7D1589f7871a749);
+    IChainlinkPriceFeed public constant USDC_FEED = IChainlinkPriceFeed(0x5B4e043d614809A4b240Ed4Be7D1589f7871a749); // 18 decimals
 
     IL1ERC20Bridge public immutable BRIDGE;
     address public immutable DOLA_CHAIN;
@@ -89,7 +90,7 @@ contract SuperChainCCTPFed is Chairable {
         uint256 oldMaxSlippageBps,
         uint256 newMaxSlippageBps
     );
-    event NewDepegThresholdBps(uint256 newDepegThresholdBps);
+    event NewDepegThreshold(uint256 newDepegThreshold);
     event SwapDOLAtoUSDC(uint256 dolaAmount, uint256 usdcAmount);
     event SwapUSDCtoDOLA(uint256 usdcAmount, uint256 dolaAmount);
 
@@ -305,10 +306,11 @@ contract SuperChainCCTPFed is Chairable {
         emit SwapDOLAtoUSDC(dolaAmount, usdcAmount);
     }
 
+    /**
+     * @notice Reverts if the USDC feed price (normalized with 18 decimals) is below the depeg threshold
+     */
     function _revertIfBelowDepegThreshold() internal view {
-        int256 usdcPrice = USDC_FEED.latestAnswer();
-        uint8 decimals = USDC_FEED.decimals();
-        if (usdcPrice < int256(10 ** decimals * depegThresholdBps / 10000)) revert DepegThresholdTooHigh();
+        if (USDC_FEED.latestAnswer() < int256(depegThreshold)) revert BelowDepegThreshold();
     }
 
     /**
@@ -324,12 +326,13 @@ contract SuperChainCCTPFed is Chairable {
 
     /**
      * @notice Governance only function for setting acceptable slippage when swapping DOLA -> USDC
-     * @param newDepegThresholdBps The new depeg threshold in bps. 1 = 0.01%
+     * @param newDepegThreshold The new depeg threshold in bps. 1 = 0.01%
      */
-    function setDepegThresholdBps(uint256 newDepegThresholdBps) external onlyGov {
-        if (newDepegThresholdBps > 10000) revert DepegThresholdTooHigh();
-        depegThresholdBps = newDepegThresholdBps;
-        emit NewDepegThresholdBps(newDepegThresholdBps);
+    function setDepegThreshold(uint256 newDepegThreshold) external onlyGov {
+        uint8 decimals = USDC_FEED.decimals();
+        if (newDepegThreshold > 10 ** decimals || newDepegThreshold < 10 ** (decimals -1)) revert InvalidDepegThreshold();
+        depegThreshold = newDepegThreshold;
+        emit NewDepegThreshold(newDepegThreshold);
     }
     /**
      * @notice Governance only function for setting acceptable slippage when swapping DOLA -> USDC

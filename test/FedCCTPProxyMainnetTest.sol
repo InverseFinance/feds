@@ -31,8 +31,8 @@ abstract contract FedCCTPProxyMainnetTest is Test {
     error OnlyGov();
     error SlippageTooHigh();
     error ZeroAddressParameter();
-    error DepegThresholdTooHigh();
-
+    error InvalidDepegThreshold();
+    error BelowDepegThreshold();
     function initialize(
         address bridge,
         address dola_chain,
@@ -210,7 +210,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
         );
         vm.startPrank(chair);
 
-        vm.expectRevert(DepegThresholdTooHigh.selector);
+        vm.expectRevert(BelowDepegThreshold.selector);
         fed.expansionAndSwap(dolaAmount, dolaAmount / 2, false, swapData, address(exchangeProxy));
     }
 
@@ -325,7 +325,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
             usdcAmount * 1e12
         );
 
-        vm.expectRevert(DepegThresholdTooHigh.selector);
+        vm.expectRevert(BelowDepegThreshold.selector);
         fed.swapUSDCtoDOLA(usdcAmount, swapData, address(exchangeProxy));
     }
 
@@ -343,7 +343,7 @@ abstract contract FedCCTPProxyMainnetTest is Test {
             dolaAmount / 1e12
         );
 
-        vm.expectRevert(DepegThresholdTooHigh.selector);
+        vm.expectRevert(BelowDepegThreshold.selector);
         fed.swapDOLAtoUSDC(dolaAmount, swapData, address(exchangeProxy));
     }
 
@@ -358,37 +358,44 @@ abstract contract FedCCTPProxyMainnetTest is Test {
             dolaAmount / 1e12
         );
         vm.startPrank(chair);
-        vm.expectRevert(DepegThresholdTooHigh.selector);
+        vm.expectRevert(BelowDepegThreshold.selector);
         fed.swapDOLAtoUSDC(dolaAmount, swapData, address(exchangeProxy));
 
         vm.stopPrank();
         
         vm.prank(gov);
-        fed.setDepegThresholdBps(8500);
+        fed.setDepegThreshold(0.85 ether);
         
         vm.prank(chair);
         fed.swapDOLAtoUSDC(dolaAmount, swapData, address(exchangeProxy));
     }
 
-    function testL1_setDepegThresholdBps() public {
+    function testL1_setDepegThreshold() public {
         vm.startPrank(gov);
-        uint256 newDepegThreshold = 1000;
-        fed.setDepegThresholdBps(newDepegThreshold);
-        assertEq(fed.depegThresholdBps(), newDepegThreshold);
+        uint256 newDepegThreshold = 0.7 ether;
+        fed.setDepegThreshold(newDepegThreshold);
+        assertEq(fed.depegThreshold(), newDepegThreshold);
     }
 
-    function testL1_setDepegThresholdBps_fail_whenCalledByNonGov() public {
+    function testL1_setDepegThreshold_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
 
         vm.expectRevert(OnlyGov.selector);
-        fed.setDepegThresholdBps(1000);
+        fed.setDepegThreshold(0.9 ether);
     }
 
-    function testL1_setDepegThresholdBps_fail_whenTooHigh() public {
+    function testL1_setDepegThreshold_fail_whenTooHigh() public {
         vm.startPrank(gov);
 
-        vm.expectRevert(DepegThresholdTooHigh.selector);
-        fed.setDepegThresholdBps(10001);
+        vm.expectRevert(InvalidDepegThreshold.selector);
+        fed.setDepegThreshold(1.01 ether);
+    }
+
+    function testL1_setDepegThreshold_fail_whenTooLow() public {
+        vm.startPrank(gov);
+
+        vm.expectRevert(InvalidDepegThreshold.selector);
+        fed.setDepegThreshold(0.01 ether);
     }
     function testL1_changeChair_fail_whenCalledByNonGov() public {
         vm.startPrank(user);
